@@ -1,0 +1,11 @@
+{
+  "name": "gridd-smart-environment",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.17.1",
+  "scripts": {
+    "dev:api": "pnpm --filter @gridd/api start:dev",
+    "build:api": "pnpm --filter @gridd/api build",
+    "test:api": "pnpm --filter @gridd/api test"
+  }
+}
