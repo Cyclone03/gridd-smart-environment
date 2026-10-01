@@ -9,7 +9,10 @@ import { Observation } from '../observations/entities/observation.entity';
 
 @WebSocketGateway({
   namespace: '/realtime',
-  cors: { origin: true, credentials: true },
+  cors: {
+    origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+    credentials: true,
+  },
 })
 export class RealtimeGateway {
   @WebSocketServer()
