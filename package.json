@@ -6,6 +6,8 @@
   "scripts": {
     "dev:api": "pnpm --filter @gridd/api start:dev",
     "build:api": "pnpm --filter @gridd/api build",
-    "test:api": "pnpm --filter @gridd/api test"
+    "test:api": "pnpm --filter @gridd/api test",
+    "migration:run": "pnpm --filter @gridd/api migration:run",
+    "migration:revert": "pnpm --filter @gridd/api migration:revert"
   }
 }
