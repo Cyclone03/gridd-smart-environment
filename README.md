@@ -26,3 +26,16 @@ L'endpoint de verification est disponible sur `GET http://localhost:3000/api/hea
 
 Les observations sont disponibles sur `GET /api/observations` et
 `GET /api/observations/latest`.
+
+## Simulateur d'observations
+
+Le simulateur est desactive par defaut. Pour generer localement des observations
+de test sans Kafka, definir les variables suivantes dans `.env` :
+
+```dotenv
+SIMULATOR_ENABLED=true
+SIMULATOR_INTERVAL_MS=5000
+```
+
+Les observations simulees passent par le meme `ObservationProcessor` que les
+futures sources d'ingestion avant leur persistance dans PostgreSQL.

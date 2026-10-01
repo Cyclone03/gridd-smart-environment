@@ -5,6 +5,7 @@ import { createTypeOrmOptions } from './database/typeorm.config';
 import { HealthController } from './health/health.controller';
 import { HealthService } from './health/health.service';
 import { ObservationsModule } from './observations/observations.module';
+import { SimulatorModule } from './simulator/simulator.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { ObservationsModule } from './observations/observations.module';
       useFactory: createTypeOrmOptions,
     }),
     ObservationsModule,
+    SimulatorModule,
   ],
   controllers: [HealthController],
   providers: [HealthService],

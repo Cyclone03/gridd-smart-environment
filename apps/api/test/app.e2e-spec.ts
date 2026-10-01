@@ -31,13 +31,19 @@ describe('API endpoints (e2e)', () => {
     return request(app.getHttpServer())
       .get('/api/observations')
       .expect(200)
-      .expect([]);
+      .expect(({ body }) => {
+        expect(Array.isArray(body)).toBe(true);
+      });
   });
 
   it('GET /api/observations/latest', () => {
     return request(app.getHttpServer())
       .get('/api/observations/latest')
       .expect(200)
-      .expect([]);
+      .expect(({ body }) => {
+        expect(Array.isArray(body)).toBe(true);
+        const types = body.map(({ type }: { type: string }) => type);
+        expect(new Set(types).size).toBe(types.length);
+      });
   });
 });
