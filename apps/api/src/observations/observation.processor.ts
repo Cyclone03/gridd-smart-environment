@@ -4,6 +4,7 @@ import { AlertsService } from '../alerts/alerts.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { Observation } from './entities/observation.entity';
 import { ObservationInput } from './interfaces/observation-input.interface';
+import { validateObservationInput } from './observation-input.validator';
 import { ObservationService } from './observations.service';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class ObservationProcessor {
   ) {}
 
   async process(input: ObservationInput): Promise<Observation> {
+    validateObservationInput(input);
     const observation = await this.observationService.create(input);
     this.realtimeGateway.emitObservationCreated(observation);
 
