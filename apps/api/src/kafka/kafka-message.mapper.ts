@@ -58,7 +58,7 @@ export function mapKafkaObservation(
     nodeId,
     type: expectedType,
     value: numericValue,
-    unit,
+    unit: normalizeUnit(expectedType, unit),
     observedAt: parseTimestamp(timestamp),
     siteId: nestedString(metadata, 'site', 'id'),
     siteLabel: nestedString(metadata, 'site', 'label'),
@@ -75,6 +75,11 @@ export function mapKafkaObservation(
     positionZ: nestedNumber(metadata, 'position', 'z'),
     metadata,
   };
+}
+
+function normalizeUnit(type: ObservationType, unit: string): string {
+  if (type === ObservationType.TEMPERATURE && unit === 'C') return '°C';
+  return unit;
 }
 
 function parseTimestamp(value: unknown): Date | null {

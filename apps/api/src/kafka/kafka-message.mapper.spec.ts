@@ -69,6 +69,20 @@ describe('Kafka observation mapping', () => {
     });
   });
 
+  it('normalizes the GRIDD temperature unit C to the canonical °C unit', () => {
+    const result = mapKafkaObservation(
+      'gridd.obs.environmental.temperature',
+      message({
+        node_id: 'environmental-node01',
+        type: 'temperature',
+        value: 22.4,
+        unit: 'C',
+      }),
+    );
+
+    expect(result.unit).toBe('°C');
+  });
+
   it.each([
     ['invalid JSON', Buffer.from('{')],
     ['missing node_id', message({ type: 'temperature', value: 20, unit: '°C' })],
