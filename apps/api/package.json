@@ -26,6 +26,7 @@
     "@nestjs/typeorm": "^11.0.0",
     "@nestjs/websockets": "^11.0.1",
     "dotenv": "^17.0.0",
+    "kafkajs": "^2.2.4",
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

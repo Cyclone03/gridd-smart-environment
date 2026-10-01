@@ -8,6 +8,7 @@ describe('HealthController', () => {
     check: jest.fn().mockResolvedValue({
       status: 'ok',
       database: 'connected',
+      kafka: 'disabled',
     }),
   };
 
@@ -24,6 +25,7 @@ describe('HealthController', () => {
     await expect(controller.getHealth()).resolves.toEqual({
       status: 'ok',
       database: 'connected',
+      kafka: 'disabled',
     });
   });
 });

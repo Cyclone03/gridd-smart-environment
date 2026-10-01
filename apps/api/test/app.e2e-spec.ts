@@ -24,7 +24,7 @@ describe('API endpoints (e2e)', () => {
     return request(app.getHttpServer())
       .get('/api/health')
       .expect(200)
-      .expect({ status: 'ok', database: 'connected' });
+      .expect({ status: 'ok', database: 'connected', kafka: 'disabled' });
   });
 
   it('GET /api/observations', () => {

@@ -74,6 +74,22 @@ describe('ObservationProcessor', () => {
     expect(realtimeGateway.emitAlertCreated).toHaveBeenCalledWith(alert);
     expect(realtimeGateway.emitComfortUpdated).toHaveBeenCalledWith(comfort);
   });
+
+  it('rejects an invalid observation before persistence', async () => {
+    const input = {
+      nodeId: 'invalid-co2-node',
+      type: ObservationType.CO2,
+      value: 900,
+      unit: 'dBA',
+      observedAt: null,
+      metadata: null,
+    } as ObservationInput;
+
+    await expect(processor.process(input)).rejects.toThrow(
+      'unit dBA is invalid for co2',
+    );
+    expect(observationService.create).not.toHaveBeenCalled();
+  });
 });
 import { AnalysisService } from '../analysis/analysis.service';
 import { AlertsService } from '../alerts/alerts.service';

@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { createTypeOrmOptions } from './database/typeorm.config';
 import { HealthController } from './health/health.controller';
 import { HealthService } from './health/health.service';
+import { KafkaModule } from './kafka/kafka.module';
 import { ObservationsModule } from './observations/observations.module';
 import { SimulatorModule } from './simulator/simulator.module';
 
@@ -19,6 +20,7 @@ import { SimulatorModule } from './simulator/simulator.module';
     }),
     ObservationsModule,
     SimulatorModule,
+    KafkaModule,
   ],
   controllers: [HealthController],
   providers: [HealthService],

@@ -40,6 +40,25 @@ SIMULATOR_INTERVAL_MS=5000
 Les observations simulees passent par le meme `ObservationProcessor` que les
 futures sources d'ingestion avant leur persistance dans PostgreSQL.
 
+## Consumer Kafka GRIDD
+
+Le consumer Kafka est desactive par defaut. Lorsqu'il est active, il utilise
+TLS avec validation du certificat CA et SASL SCRAM-SHA-256. Le certificat est
+lu depuis `KAFKA_CA_CERT_PATH`; les identifiants restent uniquement dans le
+fichier `.env` local.
+
+Les messages Kafka valides sont transformes en `ObservationInput`, puis passent
+par le meme `ObservationProcessor` que le simulateur. Un timestamp explicite
+(`timestamp`, `observed_at` ou `observedAt`) devient `observedAt`. En son absence,
+`observedAt` reste nul et la date `receivedAt` est attribuee par PostgreSQL lors
+de la persistance.
+
+KafkaJS confirme automatiquement l'offset apres le retour normal du handler.
+Un message JSON ou metier invalide est journalise puis ignore, ce qui permet au
+consumer de poursuivre. Une erreur du pipeline est relancee et n'est donc pas
+confirmee silencieusement. Cette distinction fournit le point d'extension pour
+une future DLQ sans en creer une dans cette phase.
+
 ## Analyse, alertes et temps reel
 
 - `GET /api/comfort` retourne l'indice de confort courant ou une reponse
