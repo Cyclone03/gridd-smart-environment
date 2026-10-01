@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
 import { DataSource } from 'typeorm';
+import { Alert } from '../alerts/entities/alert.entity';
 import { Observation } from '../observations/entities/observation.entity';
 
 config({ path: resolve(__dirname, '../../../../.env') });
@@ -13,7 +14,7 @@ export default new DataSource({
   database: process.env.DATABASE_NAME ?? 'gridd_dashboard',
   username: process.env.DATABASE_USER ?? 'gridd',
   password: process.env.DATABASE_PASSWORD ?? '',
-  entities: [Observation],
+  entities: [Observation, Alert],
   migrations: [resolve(__dirname, 'migrations/*{.ts,.js}')],
   synchronize: false,
 });

@@ -46,4 +46,24 @@ describe('API endpoints (e2e)', () => {
         expect(new Set(types).size).toBe(types.length);
       });
   });
+
+  it('GET /api/comfort', () => {
+    return request(app.getHttpServer())
+      .get('/api/comfort')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(['good', 'warning', 'critical', 'unavailable']).toContain(
+          body.status,
+        );
+      });
+  });
+
+  it('GET /api/alerts', () => {
+    return request(app.getHttpServer())
+      .get('/api/alerts?status=all')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(Array.isArray(body)).toBe(true);
+      });
+  });
 });

@@ -39,3 +39,16 @@ SIMULATOR_INTERVAL_MS=5000
 
 Les observations simulees passent par le meme `ObservationProcessor` que les
 futures sources d'ingestion avant leur persistance dans PostgreSQL.
+
+## Analyse, alertes et temps reel
+
+- `GET /api/comfort` retourne l'indice de confort courant ou une reponse
+  `unavailable` lorsque des mesures sont manquantes.
+- `GET /api/alerts?status=active|history|all` retourne les alertes selon leur
+  etat.
+- Le namespace Socket.IO `/realtime` diffuse `observation.created`,
+  `alert.created`, `alert.resolved` et `comfort.updated`.
+
+Les seuils et ponderations sont configurables par variables d'environnement.
+Ce sont des parametres applicatifs de developpement et non des normes
+reglementaires.
