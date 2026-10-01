@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request = require('supertest');
 import { AppModule } from '../src/app.module';
 
-describe('Health endpoint (e2e)', () => {
+describe('API endpoints (e2e)', () => {
   let app: INestApplication;
 
   beforeEach(async () => {
@@ -24,6 +24,20 @@ describe('Health endpoint (e2e)', () => {
     return request(app.getHttpServer())
       .get('/api/health')
       .expect(200)
-      .expect({ status: 'ok' });
+      .expect({ status: 'ok', database: 'connected' });
+  });
+
+  it('GET /api/observations', () => {
+    return request(app.getHttpServer())
+      .get('/api/observations')
+      .expect(200)
+      .expect([]);
+  });
+
+  it('GET /api/observations/latest', () => {
+    return request(app.getHttpServer())
+      .get('/api/observations/latest')
+      .expect(200)
+      .expect([]);
   });
 });
