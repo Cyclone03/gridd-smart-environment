@@ -7,6 +7,9 @@
     "dev:api": "pnpm --filter @gridd/api start:dev",
     "build:api": "pnpm --filter @gridd/api build",
     "test:api": "pnpm --filter @gridd/api test",
+    "dev:web": "pnpm --filter @gridd/web dev",
+    "build:web": "pnpm --filter @gridd/web build",
+    "test:web": "pnpm --filter @gridd/web test",
     "migration:run": "pnpm --filter @gridd/api migration:run",
     "migration:revert": "pnpm --filter @gridd/api migration:revert"
   }

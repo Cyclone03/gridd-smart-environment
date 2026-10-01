@@ -9,6 +9,7 @@ describe('AnalysisController', () => {
       spaceId: 'A-1540',
       score: 100,
       status: 'good',
+      values: { temperature: 23, humidity: 45, co2: 600, noise: 40 },
       components: { temperature: 100, humidity: 100, co2: 100, noise: 100 },
     }),
   };

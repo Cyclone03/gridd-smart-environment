@@ -4,6 +4,12 @@ export interface ComfortResult {
   spaceId: string | null;
   score: number;
   status: ComfortStatus;
+  values: {
+    temperature: number;
+    humidity: number;
+    co2: number;
+    noise: number;
+  };
   components: {
     temperature: number;
     humidity: number;

@@ -16,10 +16,10 @@ const config = {
   status: { goodMin: 80, warningMin: 50 },
 };
 
-describe('AnalysisService', () => {
-  const repository = {} as Repository<Observation>;
-  const service = new AnalysisService(repository, config);
+const repository = {} as Repository<Observation>;
+const service = new AnalysisService(repository, config);
 
+describe('AnalysisService', () => {
   it('calculates a good Comfort Index for normal values', () => {
     const result = service.calculateFromObservations(
       observations(22, 45, 600, 40),
@@ -29,6 +29,7 @@ describe('AnalysisService', () => {
       spaceId: 'A-1540',
       score: 100,
       status: 'good',
+      values: { temperature: 22, humidity: 45, co2: 600, noise: 40 },
       components: { temperature: 100, humidity: 100, co2: 100, noise: 100 },
     });
   });
@@ -53,6 +54,74 @@ describe('AnalysisService', () => {
       score: 0,
       status: 'critical',
       components: { temperature: 0, humidity: 0, co2: 0, noise: 0 },
+    });
+  });
+
+  it('uses the exact source values from the same comfort calculation', () => {
+    const result = service.calculateFromObservations(
+      observations(25.6, 55.7, 1429, 79.4),
+    );
+
+    expect(result).toMatchObject({
+      score: 60,
+      status: 'warning',
+      values: { temperature: 25.6, humidity: 55.7, co2: 1429, noise: 79.4 },
+      components: { temperature: 92, humidity: 100, co2: 26, noise: 22 },
+    });
+  });
+
+  describe.each([
+    {
+      metric: 'temperature',
+      type: ObservationType.TEMPERATURE,
+      cases: [
+        [17, 'critical'], [18, 'attention'], [19, 'attention'],
+        [20, 'normal'], [23, 'normal'], [25, 'normal'],
+        [26, 'attention'], [28, 'attention'], [29, 'critical'],
+      ],
+    },
+    {
+      metric: 'humidity',
+      type: ObservationType.HUMIDITY,
+      cases: [
+        [19, 'critical'], [20, 'attention'], [25, 'attention'],
+        [30, 'normal'], [50, 'normal'], [60, 'normal'],
+        [65, 'attention'], [70, 'attention'], [71, 'critical'],
+      ],
+    },
+    {
+      metric: 'co2',
+      type: ObservationType.CO2,
+      cases: [
+        [500, 'normal'], [799, 'normal'], [800, 'attention'],
+        [1000, 'attention'], [1200, 'attention'], [1201, 'critical'],
+        [1500, 'critical'],
+      ],
+    },
+    {
+      metric: 'noise',
+      type: ObservationType.SOUND_LEVEL,
+      cases: [
+        [40, 'normal'], [54, 'normal'], [55, 'attention'],
+        [65, 'attention'], [70, 'attention'], [71, 'critical'],
+        [80, 'critical'],
+      ],
+    },
+  ] as const)('$metric component boundaries', ({ metric, type, cases }) => {
+    it.each(cases)('scores %s in the %s range', (value, category) => {
+      const score = componentScore(type, value);
+
+      expect(score).toBeGreaterThanOrEqual(0);
+      expect(score).toBeLessThanOrEqual(100);
+      if (category === 'normal') expect(score).toBe(100);
+      if (category === 'attention') {
+        expect(score).toBeGreaterThanOrEqual(60);
+        expect(score).toBeLessThanOrEqual(100);
+      }
+      if (category === 'critical') {
+        expect(score).toBeGreaterThanOrEqual(0);
+        expect(score).toBeLessThanOrEqual(60);
+      }
     });
   });
 
@@ -87,4 +156,25 @@ function observations(
 
 function observation(type: ObservationType, value: number): Observation {
   return { type, value, spaceId: 'A-1540' } as Observation;
+}
+
+function componentScore(type: ObservationType, value: number): number {
+  const values = { temperature: 23, humidity: 50, co2: 500, sound: 40 };
+  if (type === ObservationType.TEMPERATURE) values.temperature = value;
+  if (type === ObservationType.HUMIDITY) values.humidity = value;
+  if (type === ObservationType.CO2) values.co2 = value;
+  if (type === ObservationType.SOUND_LEVEL) values.sound = value;
+  const result = service.calculateFromObservations(
+    observations(values.temperature, values.humidity, values.co2, values.sound),
+  );
+  if (result.status === 'unavailable') throw new Error('Expected comfort result');
+  const key =
+    type === ObservationType.TEMPERATURE
+      ? 'temperature'
+      : type === ObservationType.HUMIDITY
+        ? 'humidity'
+        : type === ObservationType.CO2
+          ? 'co2'
+          : 'noise';
+  return result.components[key];
 }

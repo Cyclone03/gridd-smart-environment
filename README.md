@@ -52,3 +52,17 @@ futures sources d'ingestion avant leur persistance dans PostgreSQL.
 Les seuils et ponderations sont configurables par variables d'environnement.
 Ce sont des parametres applicatifs de developpement et non des normes
 reglementaires.
+
+## Frontend
+
+Le dashboard Vue est disponible dans `apps/web` :
+
+```bash
+pnpm dev:web
+pnpm build:web
+pnpm test:web
+```
+
+Les URLs API et Socket.IO sont centralisees avec `VITE_API_BASE_URL` et
+`VITE_SOCKET_URL`. Les graphiques utilisent Chart.js via `vue-chartjs` pour sa
+maintenance active, son rendu responsive et son integration Vue legere.

@@ -77,6 +77,12 @@ export class AnalysisService {
       spaceId: temperature.spaceId ?? humidity.spaceId ?? co2.spaceId ?? sound.spaceId,
       score,
       status: this.statusFor(score),
+      values: {
+        temperature: temperature.value,
+        humidity: humidity.value,
+        co2: co2.value,
+        noise: sound.value,
+      },
       components,
     } satisfies ComfortResult;
   }

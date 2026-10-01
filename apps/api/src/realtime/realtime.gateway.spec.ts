@@ -45,6 +45,7 @@ describe('RealtimeGateway', () => {
       spaceId: 'A-1540',
       score: 90,
       status: 'good' as const,
+      values: { temperature: 23, humidity: 45, co2: 700, noise: 50 },
       components: { temperature: 100, humidity: 90, co2: 80, noise: 90 },
     };
 

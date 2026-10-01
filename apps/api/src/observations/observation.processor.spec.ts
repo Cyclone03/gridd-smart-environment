@@ -62,6 +62,7 @@ describe('ObservationProcessor', () => {
       spaceId: 'A-1540',
       score: 75,
       status: 'warning' as const,
+      values: { temperature: 23, humidity: 45, co2: 1300, noise: 60 },
       components: { temperature: 100, humidity: 100, co2: 40, noise: 80 },
     };
     jest.spyOn(observationService, 'create').mockResolvedValue(persisted);
