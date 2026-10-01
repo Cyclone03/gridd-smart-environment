@@ -1,10 +1,13 @@
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Observation } from './entities/observation.entity';
+import { ObservationInput } from './interfaces/observation-input.interface';
 import { ObservationService } from './observations.service';
 
 describe('ObservationService', () => {
   let service: ObservationService;
-  let repository: jest.Mocked<Pick<Repository<Observation>, 'find' | 'createQueryBuilder'>>;
+  let repository: jest.Mocked<
+    Pick<Repository<Observation>, 'create' | 'save' | 'find' | 'createQueryBuilder'>
+  >;
   let queryBuilder: jest.Mocked<
     Pick<
       SelectQueryBuilder<Observation>,
@@ -20,12 +23,25 @@ describe('ObservationService', () => {
       getMany: jest.fn(),
     };
     repository = {
+      create: jest.fn(),
+      save: jest.fn(),
       find: jest.fn(),
       createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
     };
     service = new ObservationService(
       repository as unknown as Repository<Observation>,
     );
+  });
+
+  it('persists an observation input', async () => {
+    const input = { nodeId: 'simulator-temperature' } as ObservationInput;
+    const observation = { id: 'observation-id', ...input } as Observation;
+    repository.create.mockReturnValue(observation);
+    repository.save.mockResolvedValue(observation);
+
+    await expect(service.create(input)).resolves.toBe(observation);
+    expect(repository.create).toHaveBeenCalledWith(input);
+    expect(repository.save).toHaveBeenCalledWith(observation);
   });
 
   it('returns all observations ordered by reception date', async () => {
