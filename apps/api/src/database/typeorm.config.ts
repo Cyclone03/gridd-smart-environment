@@ -15,6 +15,6 @@ export function createTypeOrmOptions(
     password: configService.get<string>('DATABASE_PASSWORD', ''),
     entities: [Observation, Alert],
     migrations: [__dirname + '/migrations/*{.ts,.js}'],
-    synchronize: false,
+    synchronize: configService.get<boolean>('DATABASE_SYNCHRONIZE', false),
   };
 }
