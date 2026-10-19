@@ -1,0 +1,16 @@
+.env
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+*.sqlite3
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+gridd_env/
+media/
+staticfiles/
+secrets/
+*.log

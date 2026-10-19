@@ -1,0 +1,17 @@
+{% load static %}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#06100d">
+  <meta name="description" content="Centre d'observation environnementale du GRIDD">
+  <title>GRIDD — Centre d'observation</title>
+  <link rel="stylesheet" href="{% static 'dashboard/dashboard.css' %}">
+</head>
+<body>
+  <div id="root"></div>
+  <noscript>JavaScript doit être activé pour utiliser le dashboard GRIDD.</noscript>
+  <script type="module" src="{% static 'dashboard/dashboard.js' %}"></script>
+</body>
+</html>

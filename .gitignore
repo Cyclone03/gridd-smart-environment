@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+gridd_env/
+
+# Django runtime
+.env
+media/
+staticfiles/
+secrets/
+
+# Frontend
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs and local artifacts
+*.log
+*.pid
+tmp/
+temp/

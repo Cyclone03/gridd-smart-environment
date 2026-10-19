@@ -1,0 +1,458 @@
+{% extends "base.html" %}
+
+{% block title %}
+GRIDD Smart Environment
+{% endblock %}
+
+
+{% block content %}
+
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
+
+    <div>
+        <h1 class="text-3xl font-bold">
+            Espaces du GRIDD
+        </h1>
+
+        <p class="text-slate-400 mt-2">
+            Données environnementales en temps réel.
+        </p>
+    </div>
+
+
+    <div
+        id="realtime-status"
+        class="inline-flex items-center gap-2 text-sm text-slate-400"
+    >
+        <span
+            id="realtime-dot"
+            class="w-2.5 h-2.5 rounded-full bg-slate-600"
+        ></span>
+
+        <span id="realtime-text">
+            Connexion temps réel...
+        </span>
+    </div>
+
+</div>
+
+
+<div class="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+
+    {% for card in cards %}
+
+    <a
+        href="{% url 'zone-dashboard' card.zone.code %}"
+        data-zone="{{ card.zone.code }}"
+        class="
+            zone-card
+            block
+            bg-slate-900
+            border
+            border-slate-800
+            rounded-2xl
+            p-5
+            hover:border-slate-600
+            transition
+        "
+    >
+
+        <div class="flex justify-between items-start mb-5">
+
+            <div>
+
+                <h2 class="text-xl font-semibold">
+                    {{ card.zone.name }}
+                </h2>
+
+                <p class="text-sm text-slate-500 mt-1">
+                    {{ card.zone.get_zone_type_display }}
+                </p>
+
+            </div>
+
+
+            {% if card.active_alerts %}
+
+            <span
+                class="
+                    text-xs
+                    px-2
+                    py-1
+                    rounded-lg
+                    bg-red-950
+                    text-red-300
+                "
+            >
+                {{ card.active_alerts }} alerte(s)
+            </span>
+
+            {% endif %}
+
+        </div>
+
+
+        <div class="grid grid-cols-2 gap-3">
+
+            {% for metric in card.metrics %}
+
+            <div
+                data-metric="{{ metric.type }}"
+                class="
+                    metric-tile
+                    bg-slate-950
+                    rounded-xl
+                    p-3
+                    {% if not metric.available %}
+                    hidden
+                    {% endif %}
+                "
+            >
+
+                <div class="text-sm text-slate-500">
+                    {{ metric.label }}
+                </div>
+
+
+                <div
+                    class="
+                        mt-1
+                        text-lg
+                        font-semibold
+                        text-slate-100
+                    "
+                >
+
+                    <span data-value>
+
+                        {% if metric.available %}
+
+                            {{ metric.value|floatformat:1 }}
+
+                        {% else %}
+
+                            —
+
+                        {% endif %}
+
+                    </span>
+
+                    <span
+                        data-unit
+                        class="text-base"
+                    >
+                        {{ metric.unit }}
+                    </span>
+
+                </div>
+
+            </div>
+
+            {% endfor %}
+
+        </div>
+
+    </a>
+
+    {% endfor %}
+
+</div>
+
+
+<script>
+(function () {
+
+    const statusDot =
+        document.getElementById("realtime-dot");
+
+    const statusText =
+        document.getElementById("realtime-text");
+
+
+    function setStatus(status) {
+
+        if (status === "connected") {
+
+            statusDot.className =
+                "w-2.5 h-2.5 rounded-full bg-emerald-500";
+
+            statusText.textContent =
+                "Temps réel connecté";
+
+            return;
+        }
+
+
+        if (status === "connecting") {
+
+            statusDot.className =
+                "w-2.5 h-2.5 rounded-full bg-amber-500";
+
+            statusText.textContent =
+                "Connexion temps réel...";
+
+            return;
+        }
+
+
+        statusDot.className =
+            "w-2.5 h-2.5 rounded-full bg-red-500";
+
+        statusText.textContent =
+            "Temps réel déconnecté";
+    }
+
+
+    function formatNumber(value) {
+
+        return new Intl.NumberFormat(
+            "fr-CA",
+            {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1,
+            }
+        ).format(
+            Number(value)
+        );
+    }
+
+
+    function getUnit(type, kafkaUnit) {
+
+        if (type === "temperature") {
+            return "°C";
+        }
+
+        if (type === "humidity") {
+            return "%";
+        }
+
+        if (type === "sound_level") {
+            return "dBA";
+        }
+
+        if (type === "co2") {
+            return "ppm";
+        }
+
+        if (type === "occupancy") {
+            return "personnes";
+        }
+
+        return kafkaUnit || "";
+    }
+
+
+    function updateObservation(observation) {
+
+        const card =
+            document.querySelector(
+                `[data-zone="${observation.zone_code}"]`
+            );
+
+
+        if (!card) {
+            console.warn(
+                "Zone inconnue :",
+                observation.zone_code
+            );
+
+            return;
+        }
+
+
+        const tile =
+            card.querySelector(
+                `[data-metric="${observation.type}"]`
+            );
+
+
+        if (!tile) {
+            console.warn(
+                "Mesure inconnue :",
+                observation.type
+            );
+
+            return;
+        }
+
+
+        tile.classList.remove(
+            "hidden"
+        );
+
+
+        const valueElement =
+            tile.querySelector(
+                "[data-value]"
+            );
+
+
+        const unitElement =
+            tile.querySelector(
+                "[data-unit]"
+            );
+
+
+        if (valueElement) {
+
+            valueElement.textContent =
+                formatNumber(
+                    observation.value
+                );
+        }
+
+
+        if (unitElement) {
+
+            unitElement.textContent =
+                getUnit(
+                    observation.type,
+                    observation.unit
+                );
+        }
+
+
+        tile.classList.add(
+            "ring-1",
+            "ring-emerald-500"
+        );
+
+
+        setTimeout(
+            function () {
+
+                tile.classList.remove(
+                    "ring-1",
+                    "ring-emerald-500"
+                );
+
+            },
+            500
+        );
+    }
+
+
+    let socket = null;
+
+    let reconnectTimer = null;
+
+
+    function connectRealtime() {
+
+        setStatus(
+            "connecting"
+        );
+
+
+        const protocol =
+            window.location.protocol === "https:"
+                ? "wss"
+                : "ws";
+
+
+        const url =
+            `${protocol}://${window.location.host}/ws/dashboard/`;
+
+
+        console.log(
+            "Connexion WebSocket :",
+            url
+        );
+
+
+        socket =
+            new WebSocket(
+                url
+            );
+
+
+        socket.onopen =
+            function () {
+
+                console.log(
+                    "WebSocket connecté"
+                );
+
+                setStatus(
+                    "connected"
+                );
+            };
+
+
+        socket.onmessage =
+            function (event) {
+
+                const message =
+                    JSON.parse(
+                        event.data
+                    );
+
+
+                console.log(
+                    "WebSocket message :",
+                    message
+                );
+
+
+                if (
+                    message.event === "observation.created"
+                    && message.data
+                ) {
+
+                    updateObservation(
+                        message.data
+                    );
+                }
+            };
+
+
+        socket.onerror =
+            function (event) {
+
+                console.error(
+                    "WebSocket error :",
+                    event
+                );
+
+                setStatus(
+                    "disconnected"
+                );
+            };
+
+
+        socket.onclose =
+            function () {
+
+                console.warn(
+                    "WebSocket déconnecté"
+                );
+
+                setStatus(
+                    "disconnected"
+                );
+
+
+                if (reconnectTimer) {
+
+                    clearTimeout(
+                        reconnectTimer
+                    );
+                }
+
+
+                reconnectTimer =
+                    setTimeout(
+                        connectRealtime,
+                        3000
+                    );
+            };
+    }
+
+
+    connectRealtime();
+
+})();
+</script>
+
+{% endblock %}

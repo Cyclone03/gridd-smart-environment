@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}{{ zone.name }}{% endblock %}
+{% block content %}
+<a href="/" class="text-sm text-slate-400 hover:text-white">← Retour</a>
+<div class="mt-3 mb-8">
+  <h1 class="text-3xl font-bold">{{ zone.name }}</h1>
+  <p class="text-slate-400">{{ zone.get_zone_type_display }}</p>
+</div>
+
+<div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+  {% for metric in metrics %}
+  <div data-metric="{{ metric.type }}" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 {% if not metric.observation %}hidden{% endif %}">
+    <div class="text-sm text-slate-500">{{ metric.label }}</div>
+    <div class="text-2xl font-bold mt-1">
+      <span data-value>{% if metric.observation %}{{ metric.observation.value }}{% endif %}</span>
+      <span data-unit class="text-base font-normal text-slate-400">{% if metric.observation %}{{ metric.observation.unit }}{% else %}{{ metric.unit }}{% endif %}</span>
+    </div>
+    <div data-quality class="text-xs mt-2 {% if metric.observation.quality_status == 'suspicious' %}text-amber-400{% else %}text-emerald-400{% endif %}">
+      {% if metric.observation %}{{ metric.observation.get_quality_status_display }}{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="grid lg:grid-cols-2 gap-6">
+  <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <h2 class="font-semibold text-lg mb-4">Historique récent</h2>
+    <div class="overflow-auto max-h-[500px]">
+      <table class="w-full text-sm">
+        <thead class="text-slate-500">
+          <tr>
+            <th class="text-left py-2">Type</th>
+            <th class="text-left py-2">Valeur</th>
+            <th class="text-left py-2">Qualité</th>
+            <th class="text-left py-2">Heure</th>
+          </tr>
+        </thead>
+        <tbody id="observations-body">
+        {% for obs in observations %}
+          <tr class="border-t border-slate-800">
+            <td class="py-2">{{ obs.type }}</td>
+            <td>{{ obs.value }} {{ obs.unit }}</td>
+            <td>{{ obs.get_quality_status_display }}</td>
+            <td>{{ obs.observed_at|default:obs.received_at|date:"H:i:s" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="text-slate-500 py-6">Aucune observation.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <h2 class="font-semibold text-lg mb-4">Alertes</h2>
+    <div class="space-y-3">
+      {% for alert in alerts %}
+      <div class="border border-slate-800 rounded-xl p-3">
+        <div class="font-medium">{{ alert.code }}</div>
+        <div class="text-sm text-slate-400">{{ alert.message }}</div>
+        <div class="text-xs text-slate-500 mt-1">{{ alert.created_at|date:"Y-m-d H:i:s" }}</div>
+      </div>
+      {% empty %}
+      <p class="text-slate-500">Aucune alerte.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<script>
+  const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+  const socket = new WebSocket(`${wsScheme}://${window.location.host}/ws/zones/{{ zone.code }}/`);
+  socket.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+
+    if (message.event !== "observation.created" || !message.data) {
+      return;
+    }
+
+    const observation = message.data;
+    const tile = document.querySelector(`[data-metric="${observation.type}"]`);
+
+    if (tile) {
+      tile.classList.remove("hidden");
+      tile.querySelector("[data-value]").textContent = new Intl.NumberFormat(
+        "fr-CA",
+        { maximumFractionDigits: 1 }
+      ).format(Number(observation.value));
+      tile.querySelector("[data-unit]").textContent = observation.unit;
+
+      const quality = tile.querySelector("[data-quality]");
+      const suspicious = observation.quality_status === "suspicious";
+      quality.textContent = suspicious ? "Suspecte" : "Normal";
+      quality.classList.toggle("text-amber-400", suspicious);
+      quality.classList.toggle("text-emerald-400", !suspicious);
+    }
+
+    const body = document.getElementById("observations-body");
+    const emptyCell = body.querySelector("td[colspan='4']");
+    if (emptyCell) {
+      emptyCell.parentElement.remove();
+    }
+
+    const row = document.createElement("tr");
+    row.className = "border-t border-slate-800";
+
+    const measuredAt = observation.observed_at || observation.received_at;
+    const time = measuredAt
+      ? new Intl.DateTimeFormat("fr-CA", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }).format(new Date(measuredAt))
+      : "—";
+
+    [
+      observation.type,
+      `${observation.value} ${observation.unit}`,
+      observation.quality_status === "suspicious" ? "Suspecte" : "Normal",
+      time,
+    ].forEach((text, index) => {
+      const cell = document.createElement("td");
+      cell.textContent = text;
+      if (index === 0) {
+        cell.className = "py-2";
+      }
+      row.appendChild(cell);
+    });
+
+    body.prepend(row);
+
+    while (body.rows.length > 200) {
+      body.deleteRow(-1);
+    }
+  };
+</script>
+{% endblock %}
