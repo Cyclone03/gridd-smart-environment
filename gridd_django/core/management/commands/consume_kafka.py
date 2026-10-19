@@ -1,5 +1,6 @@
 import os
 
+from confluent_kafka import OFFSET_END
 from django.core.management.base import (
     BaseCommand,
     CommandError,
@@ -12,11 +13,28 @@ from core.kafka import (
 )
 
 
+def assign_partitions_at_live_edge(consumer, partitions):
+    """Ignore committed backlog and consume only newly published messages."""
+    for partition in partitions:
+        partition.offset = OFFSET_END
+    consumer.assign(partitions)
+
+
 class Command(BaseCommand):
     help = (
         "Consomme les observations "
         "du Kafka réel du GRIDD"
     )
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--replay-backlog",
+            action="store_true",
+            help=(
+                "Reprendre à la position Kafka enregistrée. À éviter pour le "
+                "temps réel lorsque les messages n'ont pas d'horodatage."
+            ),
+        )
 
     def handle(
         self,
@@ -52,15 +70,31 @@ class Command(BaseCommand):
                 f"  - {topic}"
             )
 
-        consumer.subscribe(
-            topics,
-        )
+        replay_backlog = options["replay_backlog"]
+        if replay_backlog:
+            consumer.subscribe(topics)
+        else:
+            consumer.subscribe(
+                topics,
+                on_assign=assign_partitions_at_live_edge,
+            )
 
         self.stdout.write(
             self.style.SUCCESS(
                 "Consumer Kafka démarré."
             )
         )
+
+        if replay_backlog:
+            self.stdout.write(
+                self.style.WARNING(
+                    "Mode reprise du backlog activé."
+                )
+            )
+        else:
+            self.stdout.write(
+                "Positionnement sur les nouvelles données (temps réel)."
+            )
 
         self.stdout.write(
             "En attente des données GRIDD..."
@@ -87,10 +121,14 @@ class Command(BaseCommand):
                     continue
 
                 try:
+                    _, kafka_timestamp_ms = message.timestamp()
                     observation = (
                         process_message(
                             message.topic(),
                             message.value(),
+                            kafka_timestamp_ms=kafka_timestamp_ms,
+                            kafka_partition=message.partition(),
+                            kafka_offset=message.offset(),
                         )
                     )
 

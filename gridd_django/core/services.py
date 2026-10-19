@@ -41,6 +41,15 @@ EXPECTED_UNITS = {
 }
 
 
+PLAUSIBLE_RANGES = {
+    "temperature": (-20, 60),
+    "humidity": (0, 100),
+    "co2": (0, 10000),
+    "sound_level": (0, 150),
+    "occupancy": (0, 500),
+}
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,6 +70,7 @@ def _observation_payload(observation):
         "received_at": observation.received_at.isoformat(),
         "quality_status": observation.quality_status,
         "quality_reason": observation.quality_reason,
+        "metadata": observation.metadata,
     }
 
 
@@ -270,22 +280,21 @@ def assess_quality(
     value,
     observed_at,
 ):
+    numeric_value = float(value)
+    plausible_range = PLAUSIBLE_RANGES.get(sensor.sensor_type)
+    if plausible_range:
+        minimum, maximum = plausible_range
+        if not minimum <= numeric_value <= maximum:
+            return (
+                Observation.QualityStatus.INVALID,
+                f"valeur hors limites physiques: {value} (attendu {minimum} à {maximum})",
+            )
+
     profile = getattr(
         sensor.zone,
         "threshold_profile",
         None,
     )
-
-    # Pas d'analyse tant que le profil
-    # n'est pas explicitement activé.
-    if (
-        not profile
-        or not profile.enabled
-    ):
-        return (
-            Observation.QualityStatus.NORMAL,
-            "",
-        )
 
     previous = _latest_previous(
         sensor,
@@ -313,6 +322,39 @@ def assess_quality(
         - previous_time
     ).total_seconds()
 
+    if elapsed_seconds < -300:
+        return (
+            Observation.QualityStatus.INVALID,
+            "horodatage antérieur à la dernière mesure du capteur",
+        )
+
+    recent = list(
+        Observation.objects.filter(sensor=sensor)
+        .order_by("-observed_at", "-received_at")[:100]
+    )
+    oldest_unchanged_time = None
+    for item in recent:
+        if item.value != numeric_value:
+            break
+        oldest_unchanged_time = item.observed_at or item.received_at
+    if oldest_unchanged_time:
+        unchanged_minutes = max(
+            (current_time - oldest_unchanged_time).total_seconds() / 60.0,
+            0,
+        )
+        stuck_after = profile.stuck_after_minutes if profile else 15
+        if unchanged_minutes >= stuck_after:
+            return (
+                Observation.QualityStatus.SUSPICIOUS,
+                f"valeur inchangée depuis {unchanged_minutes:.0f} min",
+            )
+
+    if not profile or not profile.enabled:
+        return (
+            Observation.QualityStatus.NORMAL,
+            "",
+        )
+
     minutes = max(
         elapsed_seconds / 60.0,
         1 / 60,
@@ -320,7 +362,7 @@ def assess_quality(
 
     delta_per_minute = (
         abs(
-            float(value)
+            numeric_value
             - previous.value
         )
         / minutes
@@ -363,9 +405,51 @@ def assess_quality(
     )
 
 
+def _sync_quality_alert(observation):
+    code = f"DATA_QUALITY_{observation.type.upper()}"
+    active_alert = Alert.objects.filter(
+        zone=observation.zone,
+        code=code,
+        active=True,
+    ).first()
+
+    if observation.quality_status == Observation.QualityStatus.NORMAL:
+        if active_alert:
+            active_alert.active = False
+            active_alert.resolved_at = timezone.now()
+            active_alert.save(update_fields=["active", "resolved_at"])
+        return
+
+    severity = (
+        Alert.Severity.CRITICAL
+        if observation.quality_status == Observation.QualityStatus.INVALID
+        else Alert.Severity.WARNING
+    )
+    message = (
+        f"Donnée {observation.get_quality_status_display().lower()} pour "
+        f"{observation.zone.name}: {observation.quality_reason}"
+    )
+
+    if active_alert:
+        active_alert.observation = observation
+        active_alert.message = message
+        active_alert.severity = severity
+        active_alert.save(update_fields=["observation", "message", "severity"])
+    else:
+        Alert.objects.create(
+            zone=observation.zone,
+            observation=observation,
+            code=code,
+            severity=severity,
+            message=message,
+        )
+
+
 def evaluate_alerts(
     observation,
 ):
+    _sync_quality_alert(observation)
+
     profile = getattr(
         observation.zone,
         "threshold_profile",
@@ -456,14 +540,43 @@ def evaluate_alerts(
                 f"{observation.zone.name}"
             )
 
+    codes_by_type = {
+        "temperature": {"TEMPERATURE_OUT_OF_RANGE"},
+        "humidity": {"HUMIDITY_OUT_OF_RANGE"},
+        "co2": {"HIGH_CO2", "CO2_WARNING"},
+        "sound_level": {"HIGH_SOUND_LEVEL", "SOUND_WARNING"},
+    }
+    metric_codes = codes_by_type.get(observation.type, set())
+    Alert.objects.filter(
+        zone=observation.zone,
+        code__in=metric_codes,
+        active=True,
+    ).exclude(code=code or "").update(
+        active=False,
+        resolved_at=timezone.now(),
+    )
+
     if code:
-        Alert.objects.create(
+        active_alert = Alert.objects.filter(
             zone=observation.zone,
-            observation=observation,
             code=code,
-            severity=severity,
-            message=message,
-        )
+            active=True,
+        ).first()
+        if active_alert:
+            active_alert.observation = observation
+            active_alert.message = message
+            active_alert.severity = severity
+            active_alert.save(
+                update_fields=["observation", "message", "severity"]
+            )
+        else:
+            Alert.objects.create(
+                zone=observation.zone,
+                observation=observation,
+                code=code,
+                severity=severity,
+                message=message,
+            )
 
 
 @transaction.atomic

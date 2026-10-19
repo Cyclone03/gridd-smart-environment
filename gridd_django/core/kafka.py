@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timezone as datetime_timezone
 from pathlib import Path
 
 from confluent_kafka import Consumer
@@ -133,6 +134,10 @@ def build_consumer():
 def process_message(
     topic,
     raw_value,
+    *,
+    kafka_timestamp_ms=None,
+    kafka_partition=None,
+    kafka_offset=None,
 ):
     """
     Transforme un message Kafka en Observation Django.
@@ -222,6 +227,11 @@ def process_message(
                 "timestamp invalide: "
                 f"{observed_raw}"
             )
+    elif kafka_timestamp_ms is not None and kafka_timestamp_ms >= 0:
+        observed_at = datetime.fromtimestamp(
+            kafka_timestamp_ms / 1000,
+            tz=datetime_timezone.utc,
+        )
 
     metadata = payload.get(
         "metadata",
@@ -235,6 +245,19 @@ def process_message(
         raise ValueError(
             "metadata doit être un objet JSON"
         )
+
+    metadata = dict(metadata)
+    metadata["_kafka"] = {
+        "topic": topic,
+        "partition": kafka_partition,
+        "offset": kafka_offset,
+        "timestamp_ms": kafka_timestamp_ms,
+    }
+    metadata["timestamp_source"] = (
+        "payload" if observed_raw else
+        "kafka_broker" if observed_at else
+        "received_at"
+    )
 
     try:
         observation = (

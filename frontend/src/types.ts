@@ -15,6 +15,11 @@ export interface ThresholdProfile {
   co2_critical: number;
   sound_warning: number;
   sound_critical: number;
+  max_temperature_delta_per_minute: number;
+  max_humidity_delta_per_minute: number;
+  max_co2_delta_per_minute: number;
+  max_sound_delta_per_minute: number;
+  stuck_after_minutes: number;
 }
 
 export interface Zone {
@@ -41,6 +46,7 @@ export interface Observation {
   received_at: string;
   quality_status: "normal" | "suspicious" | "invalid";
   quality_reason: string;
+  metadata?: Record<string, unknown> & { source?: string };
 }
 
 export interface Alert {
@@ -55,3 +61,29 @@ export interface Alert {
 }
 
 export type RealtimeStatus = "connecting" | "connected" | "disconnected";
+
+export interface HistoryPoint {
+  time: string;
+  average: number;
+  minimum: number;
+  maximum: number;
+  count: number;
+  suspicious_count: number;
+}
+
+export interface ZoneHistory {
+  zone_code: string;
+  type: MetricType;
+  hours: 1 | 6 | 24 | 168;
+  date?: string | null;
+  bucket_minutes: number;
+  unit: string;
+  points: HistoryPoint[];
+  statistics: {
+    minimum: number | null;
+    maximum: number | null;
+    average: number | null;
+    count: number;
+    trend: "rising" | "falling" | "stable";
+  };
+}

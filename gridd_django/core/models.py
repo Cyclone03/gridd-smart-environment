@@ -47,7 +47,7 @@ class ThresholdProfile(models.Model):
 
     # Tant que disabled, pas d'alertes automatiques.
     enabled = models.BooleanField(
-        default=False,
+        default=True,
     )
 
     temperature_min = models.FloatField(
@@ -96,6 +96,10 @@ class ThresholdProfile(models.Model):
 
     max_sound_delta_per_minute = models.FloatField(
         default=40,
+    )
+
+    stuck_after_minutes = models.PositiveIntegerField(
+        default=15,
     )
 
     def __str__(self):

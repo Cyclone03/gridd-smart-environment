@@ -218,17 +218,29 @@ En attente des données GRIDD...
 Le consumer doit être redémarré après une modification du code Python; il ne se
 recharge pas automatiquement comme le serveur Django de développement.
 
+Au démarrage, le consumer se place volontairement à la fin des partitions pour
+recevoir les mesures actuelles. Plusieurs messages GRIDD n'ont pas
+d'horodatage : rejouer un ancien retard les ferait apparaître à tort comme des
+mesures prises maintenant. Le mode `--replay-backlog` reste disponible pour une
+inspection volontaire des anciens messages.
+
 ### Alternative — Simulateur local
 
 Pour tester sans Kafka réel, lancer ceci dans le terminal 3 :
 
 ```powershell
 cd gridd_django
-.\gridd_env\Scripts\python.exe manage.py simulate_gridd --interval 2
+.\gridd_env\Scripts\python.exe manage.py simulate_gridd --interval 30
 ```
 
 Éviter de lancer Kafka et le simulateur en même temps, sauf si le mélange de
 données réelles et simulées est volontaire.
+
+Le simulateur fait évoluer les valeurs progressivement afin d'éviter des sauts
+artificiels. Les variations rapides, les valeurs physiquement impossibles et
+les capteurs dont la valeur reste bloquée sont signalés automatiquement. La
+vue historique permet de choisir une zone, une métrique et une date précise,
+puis de naviguer entre les semaines du lundi au dimanche.
 
 ## Adresses utiles
 

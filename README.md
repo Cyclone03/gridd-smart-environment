@@ -54,11 +54,11 @@ Terminal 2 — données simulées :
 
 ```powershell
 cd gridd_django
-.\gridd_env\Scripts\python.exe manage.py simulate_gridd --interval 2
+.\gridd_env\Scripts\python.exe manage.py simulate_gridd --interval 30
 ```
 
-Ouvrir ensuite <http://127.0.0.1:8000/>. Le badge « Temps réel actif » confirme
-que le WebSocket fonctionne.
+Ouvrir ensuite <http://127.0.0.1:8000/>. Le badge « WebSocket connecté » confirme
+uniquement la connexion entre le navigateur et Django.
 
 Pour utiliser Kafka, la configuration détaillée, les tests et le dépannage,
 consulter la [documentation complète](gridd_django/README.md).
