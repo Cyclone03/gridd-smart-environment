@@ -30,6 +30,6 @@ describe('AlertsView', () => {
 
 const activeAlert = {
   id: 'alert-1', type: 'HIGH_CO2', severity: 'critical', value: 1301, threshold: 1200,
-  unit: 'ppm', nodeId: 'co2-node', spaceId: 'A-1540',
+  unit: 'ppm', nodeId: 'co2-node', zoneId: 'A-1540',
   createdAt: '2026-01-01T00:00:00.000Z', resolvedAt: null,
 } satisfies Alert;

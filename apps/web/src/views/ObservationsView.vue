@@ -8,7 +8,7 @@ import { useObservationsStore } from '@/stores/observations.store';
 
 const store = useObservationsStore();
 const type = ref<string | null>(null);
-const spaceId = ref<string | null>(null);
+const zoneId = ref<string | null>(null);
 const period = ref(24);
 const typeOptions = [
   { label: 'Tous les types', value: null },
@@ -22,15 +22,15 @@ const periodOptions = [
   { label: '15 minutes', value: 0.25 }, { label: '1 heure', value: 1 },
   { label: '6 heures', value: 6 }, { label: '24 heures', value: 24 },
 ];
-const spaceOptions = computed(() => [
+const zoneOptions = computed(() => [
   { label: 'Tous les espaces', value: null },
-  ...[...new Set(store.history.map((item) => item.spaceId).filter(Boolean))].map((value) => ({ label: value!, value })),
+  ...[...new Set(store.history.map((item) => item.zoneId).filter(Boolean))].map((value) => ({ label: value!, value })),
 ]);
 const filtered = computed(() => {
   const cutoff = Date.now() - period.value * 60 * 60 * 1000;
   return store.history.filter((item) =>
     (!type.value || item.type === type.value) &&
-    (!spaceId.value || item.spaceId === spaceId.value) &&
+    (!zoneId.value || item.zoneId === zoneId.value) &&
     new Date(item.observedAt ?? item.receivedAt).getTime() >= cutoff,
   );
 });
@@ -44,7 +44,7 @@ const formatDate = (value: string | null) => value ? new Intl.DateTimeFormat('fr
     <div class="panel p-4">
       <div class="mb-4 grid gap-3 sm:grid-cols-3">
         <Select v-model="type" :options="typeOptions" option-label="label" option-value="value" placeholder="Type" fluid />
-        <Select v-model="spaceId" :options="spaceOptions" option-label="label" option-value="value" placeholder="Espace" fluid />
+        <Select v-model="zoneId" :options="zoneOptions" option-label="label" option-value="value" placeholder="Espace" fluid />
         <Select v-model="period" :options="periodOptions" option-label="label" option-value="value" placeholder="Période" fluid />
       </div>
       <DataTable :value="filtered" :loading="store.loading" paginator :rows="15" striped-rows scrollable table-style="min-width: 900px">

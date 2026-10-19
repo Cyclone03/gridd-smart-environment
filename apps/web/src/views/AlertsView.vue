@@ -21,7 +21,7 @@ const label = (type: string) => ({ HIGH_CO2: 'CO₂ élevé', HIGH_SOUND_LEVEL: 
         <article v-for="alert in store.active" :key="alert.id" class="rounded-xl border border-rose-100 bg-rose-50/40 p-4">
           <div class="flex items-center justify-between gap-2"><b>{{ label(alert.type) }}</b><Tag :value="alert.severity === 'critical' ? 'Critique' : 'Attention'" :severity="alert.severity === 'critical' ? 'danger' : 'warn'" /></div>
           <p class="mt-2 text-sm">{{ alert.value }} {{ alert.unit }} · seuil {{ alert.threshold }} {{ alert.unit }}</p>
-          <p class="mt-1 text-xs text-slate-500">{{ alert.spaceId || 'Espace inconnu' }} · {{ formatDate(alert.createdAt) }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ alert.zoneId || 'Zone inconnu' }} · {{ formatDate(alert.createdAt) }}</p>
         </article>
         <p v-if="!store.active.length" class="py-6 text-center text-sm text-slate-500">Aucune alerte active</p>
       </div>
@@ -31,7 +31,7 @@ const label = (type: string) => ({ HIGH_CO2: 'CO₂ élevé', HIGH_SOUND_LEVEL: 
         <Column header="Sévérité"><template #body="{ data }"><Tag :value="data.severity === 'critical' ? 'Critique' : 'Attention'" :severity="data.severity === 'critical' ? 'danger' : 'warn'" /></template></Column>
         <Column header="Mesure"><template #body="{ data }">{{ data.value }} {{ data.unit }}</template></Column>
         <Column header="Seuil"><template #body="{ data }">{{ data.threshold }} {{ data.unit }}</template></Column>
-        <Column field="spaceId" header="Espace" />
+        <Column field="zoneId" header="Zone" />
         <Column header="Créée"><template #body="{ data }">{{ formatDate(data.createdAt) }}</template></Column>
       </DataTable>
     </div>
@@ -43,7 +43,7 @@ const label = (type: string) => ({ HIGH_CO2: 'CO₂ élevé', HIGH_SOUND_LEVEL: 
         <Column header="Alerte"><template #body="{ data }">{{ label(data.type) }}</template></Column>
         <Column field="severity" header="Sévérité" />
         <Column header="Valeur"><template #body="{ data }">{{ data.value }} {{ data.unit }}</template></Column>
-        <Column field="spaceId" header="Espace" />
+        <Column field="zoneId" header="Zone" />
         <Column header="Créée"><template #body="{ data }">{{ formatDate(data.createdAt) }}</template></Column>
         <Column header="Résolue"><template #body="{ data }">{{ formatDate(data.resolvedAt) }}</template></Column>
       </DataTable>
