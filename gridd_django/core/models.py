@@ -51,11 +51,11 @@ class ThresholdProfile(models.Model):
     )
 
     temperature_min = models.FloatField(
-        default=20,
+        default=15,
     )
 
     temperature_max = models.FloatField(
-        default=25,
+        default=30,
     )
 
     humidity_min = models.FloatField(
@@ -75,19 +75,19 @@ class ThresholdProfile(models.Model):
     )
 
     sound_warning = models.FloatField(
-        default=55,
+        default=50,
     )
 
     sound_critical = models.FloatField(
-        default=70,
+        default=80,
     )
 
     max_temperature_delta_per_minute = models.FloatField(
-        default=5,
+        default=0.1,
     )
 
     max_humidity_delta_per_minute = models.FloatField(
-        default=20,
+        default=1,
     )
 
     max_co2_delta_per_minute = models.FloatField(
