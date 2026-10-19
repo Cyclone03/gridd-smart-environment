@@ -112,7 +112,7 @@ def health(request):
 def latest_by_zone(request, zone_code):
     zone = Zone.objects.get(code=zone_code, active=True)
     result = {}
-    for obs_type in ["temperature", "humidity", "co2", "sound_level", "occupancy"]:
+    for obs_type in ["temperature", "humidity", "sound_level", "occupancy"]:
         obs = (
             Observation.objects
             .filter(zone=zone, type=obs_type)
@@ -218,7 +218,6 @@ def zone_history(request, zone_code):
         tolerance = {
             "temperature": 0.2,
             "humidity": 1,
-            "co2": 25,
             "sound_level": 1,
             "occupancy": 1,
         }[observation_type]

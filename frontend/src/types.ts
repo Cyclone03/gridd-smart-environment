@@ -1,7 +1,6 @@
 export type MetricType =
   | "temperature"
   | "humidity"
-  | "co2"
   | "sound_level"
   | "occupancy";
 
@@ -11,13 +10,10 @@ export interface ThresholdProfile {
   temperature_max: number;
   humidity_min: number;
   humidity_max: number;
-  co2_warning: number;
-  co2_critical: number;
   sound_warning: number;
   sound_critical: number;
   max_temperature_delta_per_minute: number;
   max_humidity_delta_per_minute: number;
-  max_co2_delta_per_minute: number;
   max_sound_delta_per_minute: number;
   stuck_after_minutes: number;
 }

@@ -24,9 +24,6 @@ EXPECTED_UNITS = {
         "%",
         "percent",
     },
-    "co2": {
-        "ppm",
-    },
     "sound_level": {
         "dBA",
         "dbA",
@@ -44,7 +41,6 @@ EXPECTED_UNITS = {
 PLAUSIBLE_RANGES = {
     "temperature": (-20, 60),
     "humidity": (0, 100),
-    "co2": (0, 10000),
     "sound_level": (0, 150),
     "occupancy": (0, 500),
 }
@@ -375,9 +371,6 @@ def assess_quality(
         "humidity":
             profile.max_humidity_delta_per_minute,
 
-        "co2":
-            profile.max_co2_delta_per_minute,
-
         "sound_level":
             profile.max_sound_delta_per_minute,
     }
@@ -494,28 +487,6 @@ def evaluate_alerts(
                 f"{observation.zone.name}"
             )
 
-    elif observation.type == "co2":
-        if (
-            observation.value
-            > profile.co2_critical
-        ):
-            code = "HIGH_CO2"
-            severity = Alert.Severity.CRITICAL
-            message = (
-                f"CO₂ critique dans "
-                f"{observation.zone.name}"
-            )
-
-        elif (
-            observation.value
-            >= profile.co2_warning
-        ):
-            code = "CO2_WARNING"
-            severity = Alert.Severity.WARNING
-            message = (
-                f"CO₂ élevé dans "
-                f"{observation.zone.name}"
-            )
 
     elif observation.type == "sound_level":
         if (
@@ -543,7 +514,6 @@ def evaluate_alerts(
     codes_by_type = {
         "temperature": {"TEMPERATURE_OUT_OF_RANGE"},
         "humidity": {"HUMIDITY_OUT_OF_RANGE"},
-        "co2": {"HIGH_CO2", "CO2_WARNING"},
         "sound_level": {"HIGH_SOUND_LEVEL", "SOUND_WARNING"},
     }
     metric_codes = codes_by_type.get(observation.type, set())

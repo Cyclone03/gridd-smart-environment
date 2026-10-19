@@ -43,16 +43,6 @@ class ThresholdProfileInline(admin.StackedInline):
             },
         ),
         (
-            "CO₂",
-            {
-                "fields": (
-                    "co2_warning",
-                    "co2_critical",
-                    "max_co2_delta_per_minute",
-                )
-            },
-        ),
-        (
             "Acoustique",
             {
                 "fields": (
