@@ -134,16 +134,14 @@ def get_or_create_zone_from_metadata(
 
     zone_id = zone_metadata.get(
         "id",
-    )
+    ) or node_id
 
     zone_label = zone_metadata.get(
         "label",
     )
 
     if not zone_id:
-        raise ValueError(
-            f"zone.id manquant pour {node_id}"
-        )
+        zone_id = node_id
 
     expected_type = infer_zone_type(
         zone_id
