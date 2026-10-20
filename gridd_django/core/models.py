@@ -83,19 +83,15 @@ class ThresholdProfile(models.Model):
     )
 
     max_temperature_delta_per_minute = models.FloatField(
-        default=0.1,
+        default=1,
     )
 
     max_humidity_delta_per_minute = models.FloatField(
-        default=1,
+        default=5,
     )
 
     max_co2_delta_per_minute = models.FloatField(
         default=800,
-    )
-
-    max_sound_delta_per_minute = models.FloatField(
-        default=40,
     )
 
     stuck_after_minutes = models.PositiveIntegerField(

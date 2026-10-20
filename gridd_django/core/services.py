@@ -370,9 +370,6 @@ def assess_quality(
 
         "humidity":
             profile.max_humidity_delta_per_minute,
-
-        "sound_level":
-            profile.max_sound_delta_per_minute,
     }
 
     limit = limits.get(
