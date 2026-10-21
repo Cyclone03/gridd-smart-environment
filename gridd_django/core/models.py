@@ -98,6 +98,8 @@ class ThresholdProfile(models.Model):
         default=15,
     )
 
+    max_sound_delta_per_minute = models.FloatField(null=True, blank=True)  # 🟢 Added null=True
+
     def __str__(self):
         return f"Profil — {self.zone.name}"
 

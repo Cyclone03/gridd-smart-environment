@@ -185,9 +185,11 @@ CHANNEL_LAYERS = {
             "channels_redis.core.RedisChannelLayer",
 
         "CONFIG": {
-            "hosts": [
-                REDIS_URL,
-            ],
+            "hosts":  [{
+                "address": REDIS_URL,
+                "socket_timeout": 15,          # 🟢 FIX: Change 'timeout' to 'socket_timeout'
+                "socket_connect_timeout": 15,
+            }],
         },
     },
 }

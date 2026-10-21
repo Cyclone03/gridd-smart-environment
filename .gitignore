@@ -1,13 +1,16 @@
 # Python
 __pycache__/
 *.py[cod]
-*.sqlite3
+*.sqlite3*
 .pytest_cache/
 .coverage
 htmlcov/
 .venv/
 venv/
 gridd_env/
+*.cert
+*.crt
+*metadata.json
 
 # Django runtime
 .env
