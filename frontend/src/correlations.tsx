@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowRightLeft, Droplets, GitCompareArrows, Info, Lightbulb, Thermometer, Volume2 } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
-import { loadZoneDayHistory, loadZoneHistory } from "./api";
+import { loadZoneDayHistory } from "./api";
 import type { MetricType, ZoneHistory } from "./types";
 
 /* ------------------------------------------------------------------ */
@@ -224,6 +224,11 @@ function synthesis(pairs: PairResult[], available: EnvMetric[]) {
   return items;
 }
 
+/** Les 7 derniers jours (aujourd'hui inclus), au format AAAA-MM-JJ local. */
+function lastSevenDays() {
+  return Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - (6 - i)); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
+}
+
 /* ------------------------------------------------------------------ */
 /* Composants                                                          */
 /* ------------------------------------------------------------------ */
@@ -314,7 +319,14 @@ export function CorrelationPanel({ zoneCode, zoneName, selectedDate }: { zoneCod
   useEffect(() => {
     if (!zoneCode || isOccupancyOnly) return;
     let cancelled = false; setLoading(true); setError(null); setSeries(null);
-    const load = (type: EnvMetric) => (period === "day" ? loadZoneDayHistory(zoneCode, type, selectedDate) : loadZoneHistory(zoneCode, type, 168)).then((h) => toSeries(h, type)).catch(() => null);
+    // Pour 7 jours, on assemble les 7 historiques journaliers (créneaux fins, ex. 15 min)
+    // plutôt que l'historique « 168 h », que le serveur agrège en gros créneaux (~27 points).
+    const dates = period === "day" ? [selectedDate] : lastSevenDays();
+    const load = (type: EnvMetric) => Promise.all(dates.map((date) => loadZoneDayHistory(zoneCode, type, date).catch(() => null))).then((days) => {
+      const ok = days.filter((h): h is ZoneHistory => h != null);
+      if (!ok.length) return null;
+      return toSeries({ ...ok[0], points: ok.flatMap((h) => h.points) }, type);
+    });
     void Promise.all(ENV_METRICS.map(load)).then((result) => {
       if (cancelled) return;
       setSeries(result.filter((s): s is Series => s != null && s.values.size >= MIN_POINTS));
