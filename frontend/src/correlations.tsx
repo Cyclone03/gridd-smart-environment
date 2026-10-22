@@ -15,7 +15,7 @@ const ENV_METRICS: EnvMetric[] = ["temperature", "humidity", "sound_level"];
 const META: Record<EnvMetric, { label: string; unit: string; color: string; icon: typeof Thermometer; the: string; of: string; to: string }> = {
   temperature: { label: "Température", unit: "°C", color: "#d98519", icon: Thermometer, the: "la température", of: "de la température", to: "à la température" },
   humidity: { label: "Humidité", unit: "%", color: "#2184a7", icon: Droplets, the: "l’humidité", of: "de l’humidité", to: "à l’humidité" },
-  sound_level: { label: "Niveau sonore", unit: "dBA", color: "#7259bd", icon: Volume2, the: "le niveau sonore", of: "du niveau sonore", to: "au niveau sonore" },
+  sound_level: { label: "Niveau sonore", unit: "dB", color: "#7259bd", icon: Volume2, the: "le niveau sonore", of: "du niveau sonore", to: "au niveau sonore" },
 };
 /** Nombre minimal de créneaux communs pour calculer une corrélation. */
 const MIN_POINTS = 8;
@@ -250,7 +250,7 @@ function PairCard({ pair }: { pair: PairResult }) {
     <div className="corr-r"><strong style={{ color: rColor(pair.r) }}>{pair.r != null ? signed(pair.r) : "—"}</strong>{strength && <em className={`strength strength-${strength.level}`}>{strength.label}{pair.r != null && Math.abs(pair.r) >= 0.2 ? (pair.r > 0 ? " · positive" : " · négative") : ""}</em>}</div>
     <div className="corr-scale" aria-hidden="true"><i style={{ left: `${position}%`, background: rColor(pair.r) }} /></div>
     <div className="corr-scale-labels"><span>−1</span><span>0</span><span>+1</span></div>
-    <dl><div><dt>Créneaux</dt><dd>{pair.n}</dd></div><div><dt>r²</dt><dd>{pair.r != null ? `${Math.round(pair.r * pair.r * 100)} %` : "—"}</dd></div><div><dt>Valeur p</dt><dd>{formatP(pair.pValue)}</dd></div></dl>
+    <dl><div><dt>Créneaux</dt><dd>{pair.n}</dd></div><div><dt>R²</dt><dd>{pair.r != null ? `${Math.round(pair.r * 10)/10}` : "—"}</dd></div><div><dt>Valeur p</dt><dd>{formatP(pair.pValue)}</dd></div></dl>
     {isIndirect(pair) && <span className="corr-indirect">Lien indirect · via {META[pair.partial!.control].the}</span>}
   </div>;
 }
@@ -301,7 +301,7 @@ function NormalizedOverlay({ series, period }: { series: Series[]; period: Perio
     <div className="corr-overlay-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={data} margin={{ top: 8, right: 14, left: -18, bottom: 0 }}>
       <CartesianGrid stroke="#dfe7e4" strokeDasharray="3 5" vertical={false} />
       <XAxis dataKey="time" axisLine={false} tickLine={false} minTickGap={40} tick={{ fill: "#64716d", fontSize: 11 }} tickFormatter={(v) => (v ? new Intl.DateTimeFormat("fr-CA", timeFormat).format(new Date(String(v))) : "")} />
-      <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64716d", fontSize: 11 }} domain={[-3, 3]} allowDataOverflow ticks={[-2, -1, 0, 1, 2]} />
+      <YAxis axisLine={false} tickLine={false} tick={{ fill: "#64716d", fontSize: 11 }} domain={[-8, 8]} allowDataOverflow ticks={[-7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7]} />
       <ReferenceLine y={0} stroke="#9aa7a3" />
       <Tooltip labelFormatter={(v) => (v ? new Intl.DateTimeFormat("fr-CA", { weekday: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(String(v))) : "")} formatter={(value, name) => [value == null ? "—" : `${signed(Number(value), 2)} σ`, META[name as EnvMetric]?.label ?? String(name)]} />
       {series.map((s) => <Line key={s.type} type="monotone" dataKey={s.type} stroke={META[s.type].color} strokeWidth={2} dot={false} connectNulls />)}
@@ -361,7 +361,6 @@ export function CorrelationPanel({ zoneCode, zoneName, selectedDate }: { zoneCod
       <h4><Lightbulb size={17} /> Conclusions</h4>
       <div className="corr-conclusion-list">{pairs.map((p) => <div className="corr-conclusion" key={pairKey(p.a, p.b)}><strong>{pairLabel(p)}</strong><p>{pairConclusion(p, bucketMinutes)}</p></div>)}</div>
       <div className="corr-synthesis"><strong>Synthèse pour {zoneName === "occupancy-camera" ? "GRIDD" : zoneName} · {periodLabel}</strong><ul>{conclusions.map((c, i) => <li key={i}>{c}</li>)}</ul></div>
-      <p className="corr-note"><Info size={13} /> Coefficient de Pearson calculé sur les moyennes par créneau de {bucketMinutes} min. Une corrélation indique que deux mesures varient ensemble, pas que l’une cause l’autre. La valeur p est indicative : des mesures consécutives ne sont pas totalement indépendantes.</p>
     </div>
   </>;
 

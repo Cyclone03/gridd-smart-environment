@@ -29,7 +29,7 @@ class Command(BaseCommand):
                 ("temperature", "°C"),
                 ("humidity", "%"),
                 ("co2", "ppm"),
-                ("sound_level", "dBA"),
+                ("sound_level", "dB"),
                 ("occupancy", "count"),
             ]
             for sensor_type, unit in sensor_defs:
