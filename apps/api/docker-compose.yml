@@ -1,0 +1,40 @@
+
+services:
+  gridd_api:
+    image: ${GRIDD_IMAGE:-gridd-api:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  gridd_kafka:
+    image: ${GRIDD_IMAGE:-gridd-api:latest}
+    restart: unless-stopped
+    env_file:
+      - .env
+    command:
+      - python
+      - manage.py
+      - consume_kafka
+    depends_on:
+      redis:
+        condition: service_healthy
+
+
