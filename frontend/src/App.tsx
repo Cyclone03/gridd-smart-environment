@@ -92,6 +92,42 @@ function startOfWeek(value: Date) {
   return date;
 }
 
+
+type ThresholdUpdates = {
+  temperature_min: number;
+  temperature_max: number;
+  humidity_min: number;
+  humidity_max: number;
+  sound_warning: number;
+  sound_critical: number;
+  max_temperature_delta_per_minute: number;
+  max_humidity_delta_per_minute: number;
+};
+
+const updateZoneThresholds = async (
+  zoneCode: string,
+  values: ThresholdUpdates
+): Promise<void> => {
+  const response = await fetch(
+    `/api/zones/${encodeURIComponent(zoneCode)}/thresholds/`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(values),
+    }
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      data.error || "Impossible de modifier les seuils."
+    );
+  }
+};
+
 function HistoryView({ zones, latest, initialZone }: { zones: Zone[]; latest: Map<string, Observation>; initialZone: string | null }) {
   const today = useMemo(() => { const value = new Date(); value.setHours(12, 0, 0, 0); return value; }, []);
   const currentWeek = useMemo(() => startOfWeek(today), [today]);
@@ -193,11 +229,155 @@ function HistoryView({ zones, latest, initialZone }: { zones: Zone[]; latest: Ma
   </main>;
 }
 
-function AlertsView({ alerts, zones, readIds, onRead, onReadAll }: { alerts: Alert[]; zones: Zone[]; readIds: number[]; onRead: (id: number) => void; onReadAll: () => void }) {
+function AlertsView({ alerts, zones, readIds, onRead, onReadAll, onUpdateThresholds, refreshDashboardForThresholds }: { alerts: Alert[]; zones: Zone[]; readIds: number[]; onRead: (id: number) => void; onReadAll: () => void; onUpdateThresholds: (zoneCode: string, value: ThresholdUpdates) => Promise<void>; refreshDashboardForThresholds: () => Promise<void> }) {
   const [ruleZone, setRuleZone] = useState(zones[0]?.code || "");
   const [openAlert, setOpenAlert] = useState<number | null>(null);
   useEffect(() => { if (!ruleZone && zones[0]) setRuleZone(zones[0].code); }, [ruleZone, zones]);
-  const zone = zones.find((item) => item.code === ruleZone); const profile = zone?.threshold_profile;
+  
+const zone = zones.find((item) => item.code === ruleZone);
+const profile = zone?.threshold_profile;
+
+const [temperatureMin, setTemperatureMin] = useState(
+  profile?.temperature_min ?? 0
+);
+const [temperatureMax, setTemperatureMax] = useState(
+  profile?.temperature_max ?? 0
+);
+const [humidityMin, setHumidityMin] = useState(
+  profile?.humidity_min ?? 0
+);
+const [humidityMax, setHumidityMax] = useState(
+  profile?.humidity_max ?? 0
+);
+const [soundWarning, setSoundWarning] = useState(
+  profile?.sound_warning ?? 0
+);
+const [soundCritical, setSoundCritical] = useState(
+  profile?.sound_critical ?? 0
+);
+const [variationTemperature, setVariationTemperature] =
+  useState(profile?.max_temperature_delta_per_minute ?? 0);
+const [variationHumidity, setVariationHumidity] =
+  useState(profile?.max_humidity_delta_per_minute ?? 0);
+
+const [savingThresholds, setSavingThresholds] = useState(false);
+const [thresholdMessage, setThresholdMessage] = useState("");
+const [thresholdError, setThresholdError] = useState(false);
+
+// Synchroniser les valeurs quand on change d'espace
+useEffect(() => {
+  setTemperatureMin(profile?.temperature_min ?? 0);
+  setTemperatureMax(profile?.temperature_max ?? 0);
+  setHumidityMin(profile?.humidity_min ?? 0);
+  setHumidityMax(profile?.humidity_max ?? 0);
+  setSoundWarning(profile?.sound_warning ?? 0);
+  setSoundCritical(profile?.sound_critical ?? 0);
+  setVariationTemperature(
+    profile?.max_temperature_delta_per_minute ?? 0
+  );
+  setVariationHumidity(
+    profile?.max_humidity_delta_per_minute ?? 0
+  );
+  setThresholdMessage("");
+  setThresholdError(false);
+}, [profile, ruleZone]);
+
+const handleSaveThresholds = async () => {
+  if (!zone || !profile) {
+    setThresholdError(true);
+    setThresholdMessage("Aucun profil de seuil disponible.");
+    return;
+  }
+
+  const values = [
+    temperatureMin,
+    temperatureMax,
+    humidityMin,
+    humidityMax,
+    soundWarning,
+    soundCritical,
+    variationTemperature,
+    variationHumidity,
+  ];
+
+  if (!values.every(Number.isFinite)) {
+    setThresholdError(true);
+    setThresholdMessage("Toutes les valeurs doivent être numériques.");
+    return;
+  }
+
+  if (temperatureMin >= temperatureMax) {
+    setThresholdError(true);
+    setThresholdMessage(
+      "La température minimale doit être inférieure à la maximale."
+    );
+    return;
+  }
+
+  if (humidityMin >= humidityMax) {
+    setThresholdError(true);
+    setThresholdMessage(
+      "L'humidité minimale doit être inférieure à la maximale."
+    );
+    return;
+  }
+
+  if (soundWarning >= soundCritical) {
+    setThresholdError(true);
+    setThresholdMessage(
+      "Le seuil sonore d'avertissement doit être inférieur au seuil critique."
+    );
+    return;
+  }
+
+  if (variationTemperature < 0 || variationHumidity < 0) {
+    setThresholdError(true);
+    setThresholdMessage(
+      "Les variations maximales ne peuvent pas être négatives."
+    );
+    return;
+  }
+
+  try {
+    setSavingThresholds(true);
+    setThresholdError(false);
+    setThresholdMessage("");
+
+    await onUpdateThresholds(zone.code, {
+      temperature_min: temperatureMin,
+      temperature_max: temperatureMax,
+      humidity_min: humidityMin,
+      humidity_max: humidityMax,
+      sound_warning: soundWarning,
+      sound_critical: soundCritical,
+      max_temperature_delta_per_minute: variationTemperature,
+      max_humidity_delta_per_minute: variationHumidity,
+    });
+
+    // Recharger les données pour afficher les valeurs enregistrées.
+    await refreshDashboardForThresholds();
+
+    setThresholdMessage("Tous les seuils ont été mis à jour.");
+  } catch (error) {
+    setThresholdError(true);
+    setThresholdMessage(
+      error instanceof Error
+        ? error.message
+        : "Erreur lors de la sauvegarde des seuils."
+    );
+  } finally {
+    setSavingThresholds(false);
+  }
+};
+
+const [savingTemperature, setSavingTemperature] = useState(false);
+const [temperatureMessage, setTemperatureMessage] = useState("");
+
+useEffect(() => {
+  setTemperatureMin(profile?.temperature_min ?? 0);
+}, [profile?.temperature_min, ruleZone]);
+
+
   const unread = alerts.filter((alert) => !readIds.includes(alert.id)).length;
   const severityLabel = { info: "Information", warning: "Avertissement", critical: "Critique" };
   const [severityFilter, setSeverityFilter] = useState<"all" | "info" | "warning" | "critical">("all");
@@ -236,7 +416,173 @@ function AlertsView({ alerts, zones, readIds, onRead, onReadAll }: { alerts: Ale
 </div><div><span className="section-kicker">En cours</span><h2>Alertes actives</h2></div>{unread > 0 && <button type="button" className="read-all" onClick={onReadAll}><Check size={15} /> Tout marquer consulté</button>}</div>{alerts.length ? filteredAlerts.map((alert) => {
     const isRead = readIds.includes(alert.id); const isOpen = openAlert === alert.id;
     return <article className={`alert-item severity-${alert.severity} ${isRead ? "is-read" : "is-unread"} ${isOpen ? "is-open" : ""}`} key={alert.id}><button type="button" className="alert-trigger" aria-expanded={isOpen} onClick={() => { setOpenAlert(isOpen ? null : alert.id); onRead(alert.id); }}><span className="alert-icon"><AlertTriangle size={19} /></span><span className="alert-copy"><span className="alert-title"><strong>{alert.zone_name}</strong>{isRead ? <em><Check size={12} /> Consultée</em> : <em className="new-alert"><Eye size={12} /> Nouvelle</em>}</span><span>{alert.message}</span><small>{new Intl.DateTimeFormat("fr-CA", { dateStyle: "medium", timeStyle: "medium" }).format(new Date(alert.created_at))}</small></span><ChevronDown className="alert-chevron" size={18} /></button>{isOpen && <div className="alert-details"><div><span>Niveau</span><strong>{severityLabel[alert.severity]}</strong></div><div><span>Règle déclenchée</span><strong>{alert.code}</strong></div><div><span>État</span><strong>Active</strong></div><button type="button" onClick={() => setRuleZone(zones.find((item) => item.id === alert.zone)?.code || ruleZone)}>Voir les seuils de cet espace</button></div>}</article>;
-  }) : <div className="empty-state"><CheckCircle2 size={28} /><strong>Aucune alerte active</strong></div>}</section><section className="rules-card"><div className="section-title"><div><span className="section-kicker">Configuration réelle</span><h2>Base des règles</h2></div></div><label className="rule-select">Espace</label>{profile ? <><div className={`rules-enabled ${profile.enabled ? "enabled" : "disabled"}`}>{profile.enabled ? "Seuils activés pour cet espace" : "Seuils désactivés pour cet espace"}</div><div className="rule-grid"><div><span>Température</span><strong>{profile.temperature_min} à {profile.temperature_max} °C</strong></div><div><span>Humidité</span><strong>{profile.humidity_min} à {profile.humidity_max} %</strong></div><div><span>Niveau sonore</span><strong>Avertissement {profile.sound_warning} · Critique {profile.sound_critical} dB</strong></div></div><h3>Contrôle de cohérence</h3><div className="rule-grid compact"><div><span>Variation température</span><strong>{profile.max_temperature_delta_per_minute} °C/min</strong></div><div><span>Variation humidité</span><strong>{profile.max_humidity_delta_per_minute} %/min</strong></div><div><span>Valeur inchangée</span><strong>{profile.stuck_after_minutes} min</strong></div></div></> : <p>Aucun profil de seuil n’est associé à cet espace.</p>}<div className="rules-note"><strong>Limites physiques utilisées par le serveur</strong><span>Une valeur hors limites est invalide. Une variation supérieure à la limite configurée ou une valeur inchangée trop longtemps est suspecte. L’alerte est résolue automatiquement quand une nouvelle mesure redevient normale.</span></div></section></div></main>;
+  }) : <div className="empty-state"><CheckCircle2 size={28} /><strong>Aucune alerte active</strong></div>}</section><section className="rules-card"><div className="section-title"><div><span className="section-kicker">Configuration réelle</span><h2>Base des règles</h2></div></div><div className="rule-select">
+  <label htmlFor="rule-zone-select">Filtrer les règles par espace</label>
+
+  <select
+    id="rule-zone-select"
+    value={ruleZone}
+    onChange={(event) => {
+      setRuleZone(event.target.value);
+      setThresholdMessage("");
+      setThresholdError(false);
+    }}
+  >
+    {zones
+      .filter((item) => item.name !== "Salle du GRIDD" && item.name !== "occupancy-camera")
+      .map((item) => (
+        <option key={item.code} value={item.code}>
+          {item.name === "occupancy-camera" ? "GRIDD" : item.name}
+        </option>
+))}
+  </select>
+</div>{profile ? <><div className={`rules-enabled ${profile.enabled ? "enabled" : "disabled"}`}>{profile.enabled ? "Seuils activés pour cet espace" : "Seuils désactivés pour cet espace"}</div>
+<div className="rule-grid">
+  <div className="temperature-edit">
+    <label htmlFor="temperature-min">
+      Température minimale (°C)
+    </label>
+    <input
+      id="temperature-min"
+      type="number"
+      step="0.1"
+      value={temperatureMin}
+      onChange={(e) => setTemperatureMin(Number(e.target.value))}
+    />
+  </div>
+
+  <div className="temperature-edit">
+    <label htmlFor="temperature-max">
+      Température maximale (°C)
+    </label>
+    <input
+      id="temperature-max"
+      type="number"
+      step="0.1"
+      value={temperatureMax}
+      onChange={(e) => setTemperatureMax(Number(e.target.value))}
+    />
+  </div>
+
+  <div className="temperature-edit">
+    <label htmlFor="humidity-min">
+      Humidité minimale (%)
+    </label>
+    <input
+      id="humidity-min"
+      type="number"
+      step="0.1"
+      min="0"
+      max="100"
+      value={humidityMin}
+      onChange={(e) => setHumidityMin(Number(e.target.value))}
+    />
+  </div>
+
+  <div className="temperature-edit">
+    <label htmlFor="humidity-max">
+      Humidité maximale (%)
+    </label>
+    <input
+      id="humidity-max"
+      type="number"
+      step="0.1"
+      min="0"
+      max="100"
+      value={humidityMax}
+      onChange={(e) => setHumidityMax(Number(e.target.value))}
+    />
+  </div>
+
+  <div className="temperature-edit">
+    <label htmlFor="sound-warning">
+      Avertissement sonore (dB)
+    </label>
+    <input
+      id="sound-warning"
+      type="number"
+      step="1"
+      value={soundWarning}
+      onChange={(e) => setSoundWarning(Number(e.target.value))}
+    />
+  </div>
+
+  <div className="temperature-edit">
+    <label htmlFor="sound-critical">
+      Seuil sonore critique (dB)
+    </label>
+    <input
+      id="sound-critical"
+      type="number"
+      step="1"
+      value={soundCritical}
+      onChange={(e) => setSoundCritical(Number(e.target.value))}
+    />
+  </div>
+
+  <div className="temperature-edit">
+    <label htmlFor="variation-temperature">
+      Variation maximale de température (°C/min)
+    </label>
+    <input
+      id="variation-temperature"
+      type="number"
+      step="0.1"
+      min="0"
+      value={variationTemperature}
+      onChange={(e) =>
+        setVariationTemperature(Number(e.target.value))
+      }
+    />
+  </div>
+
+  <div className="temperature-edit">
+    <label htmlFor="variation-humidity">
+      Variation maximale d'humidité (%/min)
+    </label>
+    <input
+      id="variation-humidity"
+      type="number"
+      step="0.1"
+      min="0"
+      value={variationHumidity}
+      onChange={(e) =>
+        setVariationHumidity(Number(e.target.value))
+      }
+    />
+  </div>
+</div>
+
+<div className="threshold-save">
+  <button
+    type="button"
+    onClick={handleSaveThresholds}
+    disabled={savingThresholds || !profile}
+  >
+    {savingThresholds
+      ? "Enregistrement..."
+      : "Enregistrer tous les seuils"}
+  </button>
+
+  {thresholdMessage && (
+    <p
+      role="status"
+      style={{ color: thresholdError ? "#c0392b" : "#21804a" }}
+    >
+      {thresholdMessage}
+    </p>
+  )}
+</div>
+
+<h3>Contrôle de cohérence</h3>
+
+<div className="rule-grid compact">
+  <div>
+    <span>Valeur inchangée</span>
+    <strong>{profile.stuck_after_minutes} min</strong>
+  </div>
+</div>
+</> : <p>Aucun profil de seuil n’est associé à cet espace.</p>}<div className="rules-note"><strong>Limites physiques utilisées par le serveur</strong><span>Une valeur hors limites est invalide. Une variation supérieure à la limite configurée ou une valeur inchangée trop longtemps est suspecte. L’alerte est résolue automatiquement quand une nouvelle mesure redevient normale.</span></div></section></div></main>;
 }
 
 export default function App() {
@@ -253,5 +599,15 @@ export default function App() {
   const openHistory = (code: string) => { setHistoryZone(code); navigate("history"); };
   const averageFor = (type: MetricType) => { const values = zones.map((zone) => latest.get(`${zone.code}:${type}`)?.value).filter((value): value is number => value != null); return { value: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null, count: values.length }; };
   const temperature = averageFor("temperature"); const humidity = averageFor("humidity"); const sound_level = averageFor("sound_level"); const occupancy = averageFor("occupancy")
-  return <div className="app-shell"><header className="topbar"><button className="brand" type="button" onClick={() => navigate("overview")}><span className="brand-mark"><Leaf size={22} /></span><span><strong>GRIDD</strong><small>Smart environment</small></span></button><nav className="top-nav" aria-label="Navigation principale"><button className={page === "overview" ? "active" : ""} type="button" onClick={() => navigate("overview")}>Vue d’ensemble</button><button className={page === "spaces" ? "active" : ""} type="button" onClick={() => navigate("spaces")}>Espaces</button><button className={page === "history" ? "active" : ""} type="button" onClick={() => navigate("history")}>Analyse historique</button><button className={page === "alerts" ? "active" : ""} type="button" onClick={() => navigate("alerts")}>Alertes{unreadAlerts > 0 && <span className="nav-badge">+{unreadAlerts}</span>}</button></nav><div className="topbar-actions"><StatusPill status={status} /><button className="icon-button" type="button" onClick={() => void refresh()} aria-label="Rafraîchir"><RefreshCw size={18} /></button></div></header>{error && <div className="global-error"><AlertTriangle size={17} />{error}</div>}{page === "overview" && <main className="dashboard"><header className="overview-head"><div><span className="overline"><Activity size={15} /> Vue d’ensemble</span><h1>État environnemental du GRIDD</h1><p>Synthèse des dernières mesures reçues.</p></div><div className="overview-context"><span>ÉTS · Pavillon A · A-1540</span><strong>{formatDate(new Date())}</strong><small>Dernière mesure : {lastUpdate ? formatTime(lastUpdate.toISOString()) : "—"}</small></div></header><section className="summary-grid three-columns"><SummaryCard label="Espaces suivis" value={String(6)} detail="zones actives" icon={Building2} tone="green" /><SummaryCard label="Température moyenne" value={temperature.value == null ? "—" : `${formatValue(temperature.value, "temperature")} °C`} detail={`${temperature.count}/${6} espaces avec mesure`} icon={Thermometer} tone="amber" /><SummaryCard label="Humidité moyenne" value={humidity.value == null ? "—" : `${formatValue(humidity.value, "humidity")} %`} detail={`${humidity.count}/${6} espaces avec mesure`} icon={Droplets} tone="blue" /><SummaryCard label="Niveau de son moyenne" value={sound_level.value == null ? "—" : `${formatValue(sound_level.value, "sound_level")} dB`} detail={`${sound_level.count}/${4} espaces avec mesure`} icon={Volume2} tone="purple" /><SummaryCard label="Nombre de personnes dans le GRIDD" value={occupancy.value == null ? "—" : `${formatValue(occupancy.value, "occupancy")}`} detail={`${occupancy.count}/${1} espaces avec mesure`} icon={Users} tone="red" /><SummaryCard label="Indice de confort thermique" value={temperature.value == null || humidity.value == null ? "—" : `${Math.round((0.7*(100-10*(Math.abs(temperature.value-25)))+0.3*(100-2*(Math.abs(humidity.value-35))))*10)/10}`} detail={`${temperature.count}/${6} espaces avec mesure`} icon={Thermometer} tone="blue" /><SummaryCard label="Taux d'occupation" value={occupancy.value == null ? "—" : `${Math.round((occupancy.value/30)*100*10)/10}`} detail={`${occupancy.count}/${1} espaces avec mesure`} icon={Users} tone="red" /><SummaryCard label="Indice de confort sonore" value={sound_level.value == null ? "—" : `${Math.round(Math.min(100,100-(100/50)*(sound_level.value-30))*10)/10}`} detail={`${sound_level.count}/${4} espaces avec mesure`} icon={Volume2} tone="purple" /></section><section className="availability-card"><div><span className="section-kicker">Mesures reçues</span><h2>Disponibilité par type de mesure</h2></div><div className="availability-grid">{METRIC_ORDER.map((type) => { const count = zones.filter((zone) => latest.has(`${zone.code}:${type}`)).length; const Icon = METRICS[type].icon; return <div key={type}><Icon size={18} style={{ color: METRICS[type].color }} /><span>{METRICS[type].label}</span><strong>{count}/{METRICS[type].label==="Niveau sonore" ? 4 : METRICS[type].label==="Occupation" ? 1 : 6}</strong></div>; })}</div></section></main>}{page === "spaces" && <SpacesView zones={zones} latest={latest} alerts={alerts} loading={loading} onHistory={openHistory} />}{page === "history" && <HistoryView zones={zones} latest={latest} initialZone={historyZone} />}{page === "alerts" && <AlertsView alerts={alerts} zones={zones} readIds={readAlertIds} onRead={markAlertRead} onReadAll={markAllAlertsRead} />}</div>;
+  return <div className="app-shell"><header className="topbar"><button className="brand" type="button" onClick={() => navigate("overview")}><span className="brand-mark"><Leaf size={22} /></span><span><strong>GRIDD</strong><small>Smart environment</small></span></button><nav className="top-nav" aria-label="Navigation principale"><button className={page === "overview" ? "active" : ""} type="button" onClick={() => navigate("overview")}>Vue d’ensemble</button><button className={page === "spaces" ? "active" : ""} type="button" onClick={() => navigate("spaces")}>Espaces</button><button className={page === "history" ? "active" : ""} type="button" onClick={() => navigate("history")}>Analyse historique</button><button className={page === "alerts" ? "active" : ""} type="button" onClick={() => navigate("alerts")}>Alertes{unreadAlerts > 0 && <span className="nav-badge">+{unreadAlerts}</span>}</button></nav><div className="topbar-actions"><StatusPill status={status} /><button className="icon-button" type="button" onClick={() => void refresh()} aria-label="Rafraîchir"><RefreshCw size={18} /></button></div></header>{error && <div className="global-error"><AlertTriangle size={17} />{error}</div>}{page === "overview" && <main className="dashboard"><header className="overview-head"><div><span className="overline"><Activity size={15} /> Vue d’ensemble</span><h1>État environnemental du GRIDD</h1><p>Synthèse des dernières mesures reçues.</p></div><div className="overview-context"><span>ÉTS · Pavillon A · A-1540</span><strong>{formatDate(new Date())}</strong><small>Dernière mesure : {lastUpdate ? formatTime(lastUpdate.toISOString()) : "—"}</small></div></header><section className="summary-grid three-columns"><SummaryCard label="Espaces suivis" value={String(6)} detail="zones actives" icon={Building2} tone="green" /><SummaryCard label="Température moyenne" value={temperature.value == null ? "—" : `${formatValue(temperature.value, "temperature")} °C`} detail={`${temperature.count}/${6} espaces avec mesure`} icon={Thermometer} tone="amber" /><SummaryCard label="Humidité moyenne" value={humidity.value == null ? "—" : `${formatValue(humidity.value, "humidity")} %`} detail={`${humidity.count}/${6} espaces avec mesure`} icon={Droplets} tone="blue" /><SummaryCard label="Niveau de son moyenne" value={sound_level.value == null ? "—" : `${formatValue(sound_level.value, "sound_level")} dB`} detail={`${sound_level.count}/${4} espaces avec mesure`} icon={Volume2} tone="purple" /><SummaryCard label="Nombre de personnes dans le GRIDD" value={occupancy.value == null ? "—" : `${formatValue(occupancy.value, "occupancy")}`} detail={`${occupancy.count}/${1} espaces avec mesure`} icon={Users} tone="red" /><SummaryCard label="Indice de confort thermique" value={temperature.value == null || humidity.value == null ? "—" : `${Math.round((0.7*(100-10*(Math.abs(temperature.value-25)))+0.3*(100-2*(Math.abs(humidity.value-35))))*10)/10}`} detail={`${temperature.count}/${6} espaces avec mesure`} icon={Thermometer} tone="blue" /><SummaryCard label="Taux d'occupation" value={occupancy.value == null ? "—" : `${Math.round((occupancy.value/30)*100*10)/10}`} detail={`${occupancy.count}/${1} espaces avec mesure`} icon={Users} tone="red" /><SummaryCard label="Indice de confort sonore" value={sound_level.value == null ? "—" : `${Math.round(Math.min(100,100-(100/50)*(sound_level.value-30))*10)/10}`} detail={`${sound_level.count}/${4} espaces avec mesure`} icon={Volume2} tone="purple" /></section><section className="availability-card"><div><span className="section-kicker">Mesures reçues</span><h2>Disponibilité par type de mesure</h2></div><div className="availability-grid">{METRIC_ORDER.map((type) => { const count = zones.filter((zone) => latest.has(`${zone.code}:${type}`)).length; const Icon = METRICS[type].icon; return <div key={type}><Icon size={18} style={{ color: METRICS[type].color }} /><span>{METRICS[type].label}</span><strong>{count}/{METRICS[type].label==="Niveau sonore" ? 4 : METRICS[type].label==="Occupation" ? 1 : 6}</strong></div>; })}</div></section></main>}{page === "spaces" && <SpacesView zones={zones} latest={latest} alerts={alerts} loading={loading} onHistory={openHistory} />}{page === "history" && <HistoryView zones={zones} latest={latest} initialZone={historyZone} />}{page === "alerts" && (
+  <AlertsView
+    alerts={alerts}
+    zones={zones}
+    readIds={readAlertIds}
+    onRead={markAlertRead}
+    onReadAll={markAllAlertsRead}
+    onUpdateThresholds={updateZoneThresholds}
+    refreshDashboardForThresholds={refresh}
+  />
+)}</div>;
 }

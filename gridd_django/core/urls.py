@@ -10,6 +10,7 @@ from .api import (
     latest_by_zone,
     zone_history,
 )
+from .views import update_temperature_min
 
 router = DefaultRouter()
 router.register("zones", ZoneViewSet, basename="zone")
@@ -28,4 +29,5 @@ urlpatterns = [
     path("api/zones/<slug:zone_code>/latest/", latest_by_zone, name="latest-by-zone"),
     path("api/zones/<slug:zone_code>/history/", zone_history, name="zone-history"),
     path("api/", include(router.urls)),
+    path("api/zones/<str:zone_code>/thresholds/", update_temperature_min, name="update_temperature_min",),
 ]
