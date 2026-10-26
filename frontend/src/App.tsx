@@ -166,7 +166,40 @@ function AlertsView({ alerts, zones, readIds, onRead, onReadAll }: { alerts: Ale
   const zone = zones.find((item) => item.code === ruleZone); const profile = zone?.threshold_profile;
   const unread = alerts.filter((alert) => !readIds.includes(alert.id)).length;
   const severityLabel = { info: "Information", warning: "Avertissement", critical: "Critique" };
-  return <main className="dashboard page-view"><header className="page-head"><div><span className="overline"><AlertTriangle size={15} /> Alertes</span><h1>Alertes actives et règles appliquées</h1><p>Cliquez sur une alerte pour la consulter. Elle reste visible tant qu’elle est active.</p></div><div className="alert-page-count"><span>{unread} non consultée{unread > 1 ? "s" : ""}</span><strong>{alerts.length}</strong><small>alertes actives</small></div></header><div className="alerts-layout"><section className="alerts-list-card"><div className="section-title"><div><span className="section-kicker">En cours</span><h2>Alertes actives</h2></div>{unread > 0 && <button type="button" className="read-all" onClick={onReadAll}><Check size={15} /> Tout marquer consulté</button>}</div>{alerts.length ? alerts.map((alert) => {
+  const [severityFilter, setSeverityFilter] = useState<"all" | "info" | "warning" | "critical">("all");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const filteredAlerts = alerts.filter((alert) => severityFilter === "all" || alert.severity === severityFilter).sort((a, b) => {const dateA = new Date(a.created_at).getTime(); const dateB = new Date(b.created_at).getTime(); return sortOrder === "asc" ? dateA - dateB : dateB - dateA;});
+  return <main className="dashboard page-view"><header className="page-head"><div><span className="overline"><AlertTriangle size={15} /> Alertes</span><h1>Alertes actives et règles appliquées</h1><p>Cliquez sur une alerte pour la consulter. Elle reste visible tant qu’elle est active.</p></div><div className="alert-page-count"><span>{unread} non consultée{unread > 1 ? "s" : ""}</span><strong>{alerts.length}</strong><small>alertes actives</small></div></header><div className="alerts-layout"><section className="alerts-list-card"><div className="section-title"><div className="alert-filters">
+  <label htmlFor="severity-filter">Filtrer par niveau :</label>
+
+  <select
+    id="severity-filter"
+    value={severityFilter}
+    onChange={(e) =>
+      setSeverityFilter(
+        e.target.value as "all" | "info" | "warning" | "critical"
+      )
+    }
+  >
+    <option value="all">Tous les niveaux</option>
+    <option value="info">{severityLabel.info}</option>
+    <option value="warning">{severityLabel.warning}</option>
+    <option value="critical">{severityLabel.critical}</option>
+  </select>
+
+  <label htmlFor="sort-order">Trier par date :</label>
+
+  <select
+    id="sort-order"
+    value={sortOrder}
+    onChange={(e) =>
+      setSortOrder(e.target.value as "asc" | "desc")
+    }
+  >
+    <option value="desc">Ordre décroissant (plus récentes)</option>
+    <option value="asc">Ordre croissant (plus anciennes)</option>
+  </select>
+</div><div><span className="section-kicker">En cours</span><h2>Alertes actives</h2></div>{unread > 0 && <button type="button" className="read-all" onClick={onReadAll}><Check size={15} /> Tout marquer consulté</button>}</div>{alerts.length ? filteredAlerts.map((alert) => {
     const isRead = readIds.includes(alert.id); const isOpen = openAlert === alert.id;
     return <article className={`alert-item severity-${alert.severity} ${isRead ? "is-read" : "is-unread"} ${isOpen ? "is-open" : ""}`} key={alert.id}><button type="button" className="alert-trigger" aria-expanded={isOpen} onClick={() => { setOpenAlert(isOpen ? null : alert.id); onRead(alert.id); }}><span className="alert-icon"><AlertTriangle size={19} /></span><span className="alert-copy"><span className="alert-title"><strong>{alert.zone_name}</strong>{isRead ? <em><Check size={12} /> Consultée</em> : <em className="new-alert"><Eye size={12} /> Nouvelle</em>}</span><span>{alert.message}</span><small>{new Intl.DateTimeFormat("fr-CA", { dateStyle: "medium", timeStyle: "medium" }).format(new Date(alert.created_at))}</small></span><ChevronDown className="alert-chevron" size={18} /></button>{isOpen && <div className="alert-details"><div><span>Niveau</span><strong>{severityLabel[alert.severity]}</strong></div><div><span>Règle déclenchée</span><strong>{alert.code}</strong></div><div><span>État</span><strong>Active</strong></div><button type="button" onClick={() => setRuleZone(zones.find((item) => item.id === alert.zone)?.code || ruleZone)}>Voir les seuils de cet espace</button></div>}</article>;
   }) : <div className="empty-state"><CheckCircle2 size={28} /><strong>Aucune alerte active</strong></div>}</section><section className="rules-card"><div className="section-title"><div><span className="section-kicker">Configuration réelle</span><h2>Base des règles</h2></div></div><label className="rule-select">Espace</label>{profile ? <><div className={`rules-enabled ${profile.enabled ? "enabled" : "disabled"}`}>{profile.enabled ? "Seuils activés pour cet espace" : "Seuils désactivés pour cet espace"}</div><div className="rule-grid"><div><span>Température</span><strong>{profile.temperature_min} à {profile.temperature_max} °C</strong></div><div><span>Humidité</span><strong>{profile.humidity_min} à {profile.humidity_max} %</strong></div><div><span>Niveau sonore</span><strong>Avertissement {profile.sound_warning} · Critique {profile.sound_critical} dB</strong></div></div><h3>Contrôle de cohérence</h3><div className="rule-grid compact"><div><span>Variation température</span><strong>{profile.max_temperature_delta_per_minute} °C/min</strong></div><div><span>Variation humidité</span><strong>{profile.max_humidity_delta_per_minute} %/min</strong></div><div><span>Valeur inchangée</span><strong>{profile.stuck_after_minutes} min</strong></div></div></> : <p>Aucun profil de seuil n’est associé à cet espace.</p>}<div className="rules-note"><strong>Limites physiques utilisées par le serveur</strong><span>Une valeur hors limites est invalide. Une variation supérieure à la limite configurée ou une valeur inchangée trop longtemps est suspecte. L’alerte est résolue automatiquement quand une nouvelle mesure redevient normale.</span></div></section></div></main>;
