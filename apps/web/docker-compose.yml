@@ -19,7 +19,6 @@ services:
       - path: .env
         required: false
     environment:
-      PORT: 3000
       # Adresse de l'API vue par le navigateur ; modifiable sans recompiler.
       GRIDD_API_URL: ${GRIDD_API_URL:-}
       GRIDD_WS_URL: ${GRIDD_WS_URL:-}

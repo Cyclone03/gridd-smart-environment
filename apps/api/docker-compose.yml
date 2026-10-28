@@ -22,23 +22,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
-    # depends_on:
-    #   postgres:
-    #     condition: service_healthy
-    #   redis:
-    #     condition: service_healthy
 
   kafka-consumer:
     image: ${GRIDD_API_IMAGE:-gridd-api:latest}
     restart: unless-stopped
     env_file:
       - .env
-    # volumes:
-    #   - ./secrets:/app/secrets:ro
     command: ["python", "manage.py", "consume_kafka"]
-    # Pas de contrôle HTTP : processus de consommation sans port exposé.
-    # healthcheck:
-    #   disable: true
     depends_on:
       api:
         condition: service_healthy
