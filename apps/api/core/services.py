@@ -1,10 +1,23 @@
+"""Ingestion des observations et contrôle de qualité des données.
+
+Point d'entrée unique : ``ingest_observation``. Il est appelé par le consumer
+Kafka et par le simulateur, et enchaîne dans une même transaction :
+
+1. rattachement à la zone et au capteur (créés au besoin) ;
+2. vérification de l'unité et de la valeur ;
+3. évaluation de la qualité (valeur impossible, variation rapide, capteur
+   bloqué) et alerte de qualité associée ;
+4. évaluation des règles d'alarme configurables (``core.alarm_engine``) ;
+5. diffusion temps réel après validation de la transaction.
+"""
+
 import logging
 
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from django.db import transaction
 from django.utils import timezone
 
+from . import metrics
+from .alarm_engine import evaluate_alarm_rules
 from .models import (
     Alert,
     Observation,
@@ -12,93 +25,10 @@ from .models import (
     ThresholdProfile,
     Zone,
 )
-
-
-EXPECTED_UNITS = {
-    "temperature": {
-        "°C",
-        "C",
-        "celsius",
-    },
-    "humidity": {
-        "%",
-        "percent",
-    },
-    "sound_level": {
-        "dBA",
-        "dbA",
-        "dba",
-    },
-    "occupancy": {
-        "count",
-        "person",
-        "persons",
-        "people",
-    },
-}
-
-
-PLAUSIBLE_RANGES = {
-    "temperature": (-20, 60),
-    "humidity": (0, 100),
-    "sound_level": (0, 150),
-    "occupancy": (0, 500),
-}
+from .realtime import broadcast_observation, observation_payload, schedule_alerts_changed
 
 
 logger = logging.getLogger(__name__)
-
-
-def _observation_payload(observation):
-    return {
-        "id": observation.pk,
-        "zone_code": observation.zone.code,
-        "zone_name": observation.zone.name,
-        "sensor_node_id": observation.sensor.node_id,
-        "type": observation.type,
-        "value": observation.value,
-        "unit": observation.unit,
-        "observed_at": (
-            observation.observed_at.isoformat()
-            if observation.observed_at
-            else None
-        ),
-        "received_at": observation.received_at.isoformat(),
-        "quality_status": observation.quality_status,
-        "quality_reason": observation.quality_reason,
-        "metadata": observation.metadata,
-    }
-
-
-def _broadcast_observation(payload):
-    """Publie une observation aux dashboards sans annuler son ingestion."""
-    channel_layer = get_channel_layer()
-
-    if channel_layer is None:
-        logger.warning(
-            "Observation %s enregistrée, mais aucun channel layer n'est configuré.",
-            payload["id"],
-        )
-        return
-
-    event = {
-        "type": "observation.created",
-        "payload": payload,
-    }
-
-    try:
-        async_to_sync(channel_layer.group_send)("dashboard", event)
-        async_to_sync(channel_layer.group_send)(
-            f"zone_{payload['zone_code']}",
-            event,
-        )
-    except Exception:
-        # La donnée est déjà validée. Une panne WebSocket ne doit pas faire
-        # rejouer le message Kafka et créer un doublon en base.
-        logger.exception(
-            "Impossible de publier l'observation %s en temps réel.",
-            payload["id"],
-        )
 
 
 def infer_zone_type(zone_id):
@@ -275,7 +205,8 @@ def assess_quality(
     observed_at,
 ):
     numeric_value = float(value)
-    plausible_range = PLAUSIBLE_RANGES.get(sensor.sensor_type)
+    definition = metrics.get_metric(sensor.sensor_type)
+    plausible_range = definition.plausible_range if definition else None
     if plausible_range:
         minimum, maximum = plausible_range
         if not minimum <= numeric_value <= maximum:
@@ -405,7 +336,9 @@ def _sync_quality_alert(observation):
         if active_alert:
             active_alert.active = False
             active_alert.resolved_at = timezone.now()
-            active_alert.save(update_fields=["active", "resolved_at"])
+            active_alert.resolution = Alert.Resolution.RETURNED_TO_NORMAL
+            active_alert.save(update_fields=["active", "resolved_at", "resolution"])
+            schedule_alerts_changed()
         return
 
     severity = (
@@ -430,118 +363,9 @@ def _sync_quality_alert(observation):
             code=code,
             severity=severity,
             message=message,
+            trigger_value=observation.value,
         )
-
-
-def evaluate_alerts(
-    observation,
-):
-    _sync_quality_alert(observation)
-
-    profile = getattr(
-        observation.zone,
-        "threshold_profile",
-        None,
-    )
-
-    if (
-        not profile
-        or not profile.enabled
-    ):
-        return
-
-    code = None
-    severity = None
-    message = None
-
-    if observation.type == "temperature":
-        if (
-            observation.value
-            < profile.temperature_min
-            or observation.value
-            > profile.temperature_max
-        ):
-            code = "TEMPERATURE_OUT_OF_RANGE"
-            severity = Alert.Severity.WARNING
-            message = (
-                f"Température hors plage dans "
-                f"{observation.zone.name}"
-            )
-
-    elif observation.type == "humidity":
-        if (
-            observation.value
-            < profile.humidity_min
-            or observation.value
-            > profile.humidity_max
-        ):
-            code = "HUMIDITY_OUT_OF_RANGE"
-            severity = Alert.Severity.WARNING
-            message = (
-                f"Humidité hors plage dans "
-                f"{observation.zone.name}"
-            )
-
-
-    elif observation.type == "sound_level":
-        if (
-            observation.value
-            > profile.sound_critical
-        ):
-            code = "HIGH_SOUND_LEVEL"
-            severity = Alert.Severity.CRITICAL
-            message = (
-                f"Niveau sonore critique dans "
-                f"{observation.zone.name}"
-            )
-
-        elif (
-            observation.value
-            >= profile.sound_warning
-        ):
-            code = "SOUND_WARNING"
-            severity = Alert.Severity.WARNING
-            message = (
-                f"Niveau sonore élevé dans "
-                f"{observation.zone.name}"
-            )
-
-    codes_by_type = {
-        "temperature": {"TEMPERATURE_OUT_OF_RANGE"},
-        "humidity": {"HUMIDITY_OUT_OF_RANGE"},
-        "sound_level": {"HIGH_SOUND_LEVEL", "SOUND_WARNING"},
-    }
-    metric_codes = codes_by_type.get(observation.type, set())
-    Alert.objects.filter(
-        zone=observation.zone,
-        code__in=metric_codes,
-        active=True,
-    ).exclude(code=code or "").update(
-        active=False,
-        resolved_at=timezone.now(),
-    )
-
-    if code:
-        active_alert = Alert.objects.filter(
-            zone=observation.zone,
-            code=code,
-            active=True,
-        ).first()
-        if active_alert:
-            active_alert.observation = observation
-            active_alert.message = message
-            active_alert.severity = severity
-            active_alert.save(
-                update_fields=["observation", "message", "severity"]
-            )
-        else:
-            Alert.objects.create(
-                zone=observation.zone,
-                observation=observation,
-                code=code,
-                severity=severity,
-                message=message,
-            )
+        schedule_alerts_changed()
 
 
 @transaction.atomic
@@ -569,10 +393,8 @@ def ingest_observation(
         metadata=metadata,
     )
 
-    expected_units = EXPECTED_UNITS.get(
-        observation_type,
-        set(),
-    )
+    definition = metrics.get_metric(observation_type)
+    expected_units = definition.accepted_units if definition else None
 
     if (
         expected_units
@@ -617,17 +439,12 @@ def ingest_observation(
         quality_reason=quality_reason,
     )
 
-    evaluate_alerts(
-        observation
-    )
+    _sync_quality_alert(observation)
+    evaluate_alarm_rules(observation)
 
-    payload = _observation_payload(
-        observation
-    )
+    payload = observation_payload(observation)
 
     # Le navigateur ne doit recevoir que des données réellement validées.
-    transaction.on_commit(
-        lambda: _broadcast_observation(payload)
-    )
+    transaction.on_commit(lambda: broadcast_observation(payload))
 
     return observation

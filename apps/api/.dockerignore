@@ -1,16 +1,31 @@
+# Environnement local et secrets : jamais dans l'image
 .env
-.git
-.gitignore
+.env.*
+!.env.example
+secrets/
+*.crt
+*.pem
+*.key
+
+# Données et artefacts locaux
+*.sqlite3
+staticfiles/
+media/
+*.log
+
+# Python
 __pycache__/
 *.py[cod]
-*.sqlite3
-.pytest_cache/
-.coverage
-htmlcov/
 .venv/
 venv/
 gridd_env/
-media/
-staticfiles/
-secrets/
-*.log
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Outillage
+.git
+.gitignore
+Dockerfile
+docker-compose*.yml
+README.md

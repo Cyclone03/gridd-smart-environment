@@ -1,20 +1,44 @@
-from datetime import datetime, time, timedelta
+"""Points d'accès REST en lecture : zones, capteurs, observations, alertes,
+historique et état de santé. Voir docs/api.md pour le contrat complet."""
 
+from django.conf import settings
 from django.db import connection
-from django.db.models import F, Q
+from django.db.models import F, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework.decorators import action, api_view
-from rest_framework.response import Response
+from django.utils.dateparse import parse_datetime
 from rest_framework import viewsets
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 
-from .models import Zone, Sensor, Observation, Alert
-from .serializers import ZoneSerializer, SensorSerializer, ObservationSerializer, AlertSerializer
+from . import metrics
+from .history import HistoryParamError, aggregate, compute_trend, parse_period
+from .models import Alert, Observation, Sensor, Zone
+from .serializers import AlertSerializer, ObservationSerializer, SensorSerializer, ZoneSerializer
+
+
+def _newest_first(queryset):
+    return queryset.order_by(F("observed_at").desc(nulls_last=True), "-received_at")
 
 
 class ZoneViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Zone.objects.filter(active=True).order_by("name")
     serializer_class = ZoneSerializer
+
+    def get_queryset(self):
+        return (
+            Zone.objects.filter(active=True)
+            .select_related("threshold_profile")
+            .prefetch_related(
+                Prefetch(
+                    "sensors",
+                    queryset=Sensor.objects.filter(active=True),
+                    to_attr="active_sensors",
+                )
+            )
+            .order_by("name")
+        )
 
 
 class SensorViewSet(viewsets.ReadOnlyModelViewSet):
@@ -39,32 +63,21 @@ class ObservationViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(zone__code=zone)
         if obs_type:
             qs = qs.filter(type=obs_type)
-        return qs.order_by(
-            F("observed_at").desc(nulls_last=True),
-            "-received_at",
-        )[:1000]
+        return _newest_first(qs)[:1000]
 
     @action(detail=False, methods=["get"], url_path="latest")
     def latest(self, request):
-        """Return the newest available reading for every active zone and metric.
+        """Dernière mesure disponible pour chaque zone active et chaque type.
 
-        This endpoint is intentionally independent from the global 1,000-row
-        activity feed. A noisy sensor must not hide a less frequent metric.
+        Volontairement indépendant du flux global limité à 1 000 lignes : un
+        capteur très bavard ne doit pas masquer une mesure moins fréquente.
         """
         observations = []
-        metric_types = [choice for choice, _ in Sensor.SensorType.choices]
         for zone in Zone.objects.filter(active=True).order_by("name"):
-            for metric_type in metric_types:
-                observation = (
-                    Observation.objects
-                    .filter(zone=zone, type=metric_type)
-                    .select_related("zone", "sensor")
-                    .order_by(
-                        F("observed_at").desc(nulls_last=True),
-                        "-received_at",
-                    )
-                    .first()
-                )
+            for metric_type in metrics.METRICS:
+                observation = _newest_first(
+                    Observation.objects.filter(zone=zone, type=metric_type).select_related("zone", "sensor")
+                ).first()
                 if observation:
                     observations.append(observation)
 
@@ -75,22 +88,65 @@ class ObservationViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(ObservationSerializer(observations, many=True).data)
 
 
+def _parse_instant_param(request, name):
+    raw = request.query_params.get(name)
+    if not raw:
+        return None
+    value = parse_datetime(raw)
+    if value is None:
+        raise ValidationError({name: ["Date et heure ISO 8601 attendue."]})
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value)
+    return value
+
+
 class AlertViewSet(viewsets.ReadOnlyModelViewSet):
+    """Alertes et historique des événements d'alarme.
+
+    Chaque alerte est un épisode : ``created_at`` (déclenchement) puis
+    ``resolved_at`` / ``resolution`` (retour à la normale). Filtres :
+    ``active``, ``zone`` (code), ``rule`` (id), ``severity``, ``since``,
+    ``until`` (ISO 8601) et ``limit`` (défaut 500, maximum 1 000).
+    """
+
     serializer_class = AlertSerializer
 
     def get_queryset(self):
-        qs = Alert.objects.select_related("zone", "observation")
-        zone = self.request.query_params.get("zone")
-        active = self.request.query_params.get("active")
-        if zone:
-            qs = qs.filter(zone__code=zone)
-        if active in {"true", "false"}:
-            qs = qs.filter(active=(active == "true"))
-        return qs.order_by("-created_at")[:500]
+        qs = Alert.objects.select_related("zone", "observation", "rule")
+        params = self.request.query_params
+        if params.get("zone"):
+            qs = qs.filter(zone__code=params["zone"])
+        if params.get("active") in {"true", "false"}:
+            qs = qs.filter(active=(params["active"] == "true"))
+        if params.get("rule"):
+            try:
+                qs = qs.filter(rule_id=int(params["rule"]))
+            except ValueError as exc:
+                raise ValidationError({"rule": ["Identifiant de règle invalide."]}) from exc
+        if params.get("severity"):
+            qs = qs.filter(severity=params["severity"])
+        since = _parse_instant_param(self.request, "since")
+        until = _parse_instant_param(self.request, "until")
+        if since:
+            qs = qs.filter(created_at__gte=since)
+        if until:
+            qs = qs.filter(created_at__lte=until)
+        if self.action != "list":
+            return qs
+        try:
+            limit = min(max(int(params.get("limit", "500")), 1), 1000)
+        except ValueError as exc:
+            raise ValidationError({"limit": ["Nombre entier attendu."]}) from exc
+        return qs.order_by("-created_at")[:limit]
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def health(request):
+    """Contrôle de santé utilisé par Docker et la supervision.
+
+    Répond 200 si la base de données répond, 503 sinon.
+    """
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
@@ -101,144 +157,85 @@ def health(request):
         database = "error"
         status = "degraded"
 
-    return Response({
-        "status": status,
-        "database": database,
-        "timestamp": timezone.now().isoformat(),
-    })
+    channel_backend = settings.CHANNEL_LAYERS["default"]["BACKEND"].rsplit(".", 1)[-1]
+    return Response(
+        {
+            "status": status,
+            "database": database,
+            "channel_layer": channel_backend,
+            "timestamp": timezone.now().isoformat(),
+        },
+        status=200 if status == "ok" else 503,
+    )
 
 
 @api_view(["GET"])
 def latest_by_zone(request, zone_code):
-    zone = Zone.objects.get(code=zone_code, active=True)
+    zone = get_object_or_404(Zone, code=zone_code, active=True)
     result = {}
-    for obs_type in ["temperature", "humidity", "sound_level", "occupancy"]:
-        obs = (
-            Observation.objects
-            .filter(zone=zone, type=obs_type)
-            .select_related("sensor")
-            .order_by(
-                F("observed_at").desc(nulls_last=True),
-                "-received_at",
-            )
-            .first()
-        )
+    for obs_type in metrics.METRICS:
+        obs = _newest_first(Observation.objects.filter(zone=zone, type=obs_type).select_related("sensor", "zone")).first()
         if obs:
             result[obs_type] = ObservationSerializer(obs).data
-    return Response({
-        "zone": ZoneSerializer(zone).data,
-        "latest": result,
-    })
+    return Response({"zone": ZoneSerializer(zone).data, "latest": result})
 
 
 @api_view(["GET"])
 def zone_history(request, zone_code):
+    """Historique agrégé d'une mesure pour une zone sur une période.
+
+    Voir ``core.history`` pour les paramètres acceptés.
+    """
     zone = get_object_or_404(Zone, code=zone_code, active=True)
     observation_type = request.query_params.get("type", "temperature")
-    valid_types = {choice for choice, _ in Sensor.SensorType.choices}
-    if observation_type not in valid_types:
-        return Response({"detail": "Type de mesure invalide."}, status=400)
-
-    requested_date = request.query_params.get("date")
-    if requested_date:
-        try:
-            selected_date = datetime.strptime(requested_date, "%Y-%m-%d").date()
-        except ValueError:
-            return Response({"detail": "La date doit respecter le format AAAA-MM-JJ."}, status=400)
-        local_timezone = timezone.get_current_timezone()
-        period_start = timezone.make_aware(
-            datetime.combine(selected_date, time.min),
-            local_timezone,
-        )
-        period_end = period_start + timedelta(days=1)
-        hours = 24
-        bucket_minutes = 15
-        date_filter = (
-            Q(observed_at__gte=period_start, observed_at__lt=period_end)
-            | Q(
-                observed_at__isnull=True,
-                received_at__gte=period_start,
-                received_at__lt=period_end,
-            )
-        )
-    else:
-        try:
-            hours = int(request.query_params.get("hours", "24"))
-        except ValueError:
-            return Response({"detail": "La période doit être un nombre d'heures."}, status=400)
-        if hours not in {1, 6, 24, 168}:
-            return Response({"detail": "Période permise: 1, 6, 24 ou 168 heures."}, status=400)
-        bucket_minutes = 5 if hours <= 6 else 15 if hours <= 24 else 60
-        cutoff = timezone.now() - timedelta(hours=hours)
-        date_filter = (
-            Q(observed_at__gte=cutoff)
-            | Q(observed_at__isnull=True, received_at__gte=cutoff)
+    definition = metrics.get_metric(observation_type)
+    if definition is None:
+        return Response(
+            {"detail": "Type de mesure invalide.", "errors": {"type": ["Type de mesure inconnu."]}},
+            status=400,
         )
 
-    observations = list(
-        Observation.objects.filter(zone=zone, type=observation_type)
-        .filter(date_filter)
-        .order_by("observed_at", "received_at")
-        .values("value", "unit", "observed_at", "received_at", "quality_status")
+    tz = timezone.get_current_timezone()
+    try:
+        period = parse_period(request.query_params, tz=tz)
+    except HistoryParamError as exc:
+        body = {"detail": exc.message}
+        if exc.field:
+            body["errors"] = {exc.field: [exc.message]}
+        return Response(body, status=400)
+
+    in_period = Q(observed_at__gte=period.start, observed_at__lt=period.end) | Q(
+        observed_at__isnull=True,
+        received_at__gte=period.start,
+        received_at__lt=period.end,
     )
+    rows = (
+        Observation.objects.filter(zone=zone, type=observation_type)
+        .filter(in_period)
+        .order_by("observed_at", "received_at")
+        .values("value", "observed_at", "received_at", "quality_status")
+        .iterator(chunk_size=5000)
+    )
+    points, values = aggregate(rows, period.bucket_minutes, tz, Observation.QualityStatus.NORMAL)
 
-    buckets = {}
-    for observation in observations:
-        measured_at = observation["observed_at"] or observation["received_at"]
-        bucket_epoch = int(measured_at.timestamp()) // (bucket_minutes * 60)
-        bucket_time = datetime.fromtimestamp(
-            bucket_epoch * bucket_minutes * 60,
-            tz=measured_at.tzinfo,
-        )
-        bucket = buckets.setdefault(
-            bucket_epoch,
-            {"time": bucket_time, "values": [], "suspicious": 0},
-        )
-        bucket["values"].append(float(observation["value"]))
-        if observation["quality_status"] != Observation.QualityStatus.NORMAL:
-            bucket["suspicious"] += 1
-
-    points = []
-    for bucket_epoch in sorted(buckets):
-        bucket = buckets[bucket_epoch]
-        values = bucket["values"]
-        points.append({
-            "time": bucket["time"].isoformat(),
-            "average": round(sum(values) / len(values), 2),
-            "minimum": min(values),
-            "maximum": max(values),
-            "count": len(values),
-            "suspicious_count": bucket["suspicious"],
-        })
-
-    values = [float(observation["value"]) for observation in observations]
-    trend = "stable"
-    if len(points) >= 2:
-        delta = points[-1]["average"] - points[0]["average"]
-        tolerance = {
-            "temperature": 0.2,
-            "humidity": 1,
-            "sound_level": 1,
-            "occupancy": 1,
-        }[observation_type]
-        if delta > tolerance:
-            trend = "rising"
-        elif delta < -tolerance:
-            trend = "falling"
-
-    return Response({
-        "zone_code": zone.code,
-        "type": observation_type,
-        "hours": hours,
-        "date": requested_date,
-        "bucket_minutes": bucket_minutes,
-        "unit": observations[-1]["unit"] if observations else "",
-        "points": points,
-        "statistics": {
-            "minimum": min(values) if values else None,
-            "maximum": max(values) if values else None,
-            "average": round(sum(values) / len(values), 2) if values else None,
-            "count": len(values),
-            "trend": trend,
-        },
-    })
+    return Response(
+        {
+            "zone_code": zone.code,
+            "type": observation_type,
+            "start": timezone.localtime(period.start, tz).isoformat(),
+            "end": timezone.localtime(period.end, tz).isoformat(),
+            "timezone": str(tz),
+            "hours": period.hours,
+            "date": period.date,
+            "bucket_minutes": period.bucket_minutes,
+            "unit": definition.unit,
+            "points": points,
+            "statistics": {
+                "minimum": min(values) if values else None,
+                "maximum": max(values) if values else None,
+                "average": round(sum(values) / len(values), 2) if values else None,
+                "count": len(values),
+                "trend": compute_trend(points, definition.trend_tolerance),
+            },
+        }
+    )
