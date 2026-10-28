@@ -32,8 +32,8 @@ RUN DJANGO_SECRET_KEY=collectstatic-only DEBUG=false python manage.py collectsta
 USER gridd
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=3).status == 200 else 1)"
+# HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+#   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=3).status == 200 else 1)"
 
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
 CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "--proxy-headers", "config.asgi:application"]
