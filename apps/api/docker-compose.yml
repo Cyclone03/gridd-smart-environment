@@ -5,7 +5,7 @@ services:
   api:
     image: ${GRIDD_API_IMAGE:-gridd-api:latest}
     build:
-      context: .
+      context: ./apps/api
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
@@ -26,7 +26,7 @@ services:
   kafka-consumer:
     image: ${GRIDD_API_IMAGE:-gridd-api:latest}
     build:
-      context: .
+      context: ./apps/api
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:

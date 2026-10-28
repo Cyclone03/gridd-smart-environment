@@ -12,7 +12,7 @@ services:
   gridd-web:
     image: ${GRIDD_WEB_IMAGE:-gridd-web:latest}
     build:
-      context: .
+      context: ./apps/web
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
