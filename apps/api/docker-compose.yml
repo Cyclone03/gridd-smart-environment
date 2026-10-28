@@ -1,17 +1,17 @@
-# Démarrage autonome de l'API GRIDD et de ses dépendances.
-#
+
+# Démarrage autonome de l'API GRIDD et du consommateur Kafka.
 
 services:
   api:
     image: ${GRIDD_API_IMAGE:-gridd-api:latest}
     build:
-      context: .
+      context: ./apps/api
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
       - .env
-    ports:
-      - "${API_PORT:-8000}:8000"
+    # ports:
+    #   - "${API_PORT:-8000}:8000"
     healthcheck:
       test:
         - CMD
@@ -25,6 +25,9 @@ services:
 
   kafka-consumer:
     image: ${GRIDD_API_IMAGE:-gridd-api:latest}
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
       - .env
@@ -32,39 +35,3 @@ services:
     depends_on:
       api:
         condition: service_healthy
-
-#   postgres:
-#     image: postgres:16-alpine
-#     restart: unless-stopped
-#     environment:
-#       POSTGRES_DB: ${DB_NAME:-gridd}
-#       POSTGRES_USER: ${DB_USER:-gridd}
-#       POSTGRES_PASSWORD: ${DB_PASSWORD:?Renseigner DB_PASSWORD dans .env}
-#     ports:
-#       - "${DB_PORT_PUBLISHED:-5433}:5432"
-#     volumes:
-#       - gridd_postgres_data:/var/lib/postgresql/data
-#     healthcheck:
-#       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-#       interval: 5s
-#       timeout: 3s
-#       retries: 10
-
-#   redis:
-#     image: redis:7-alpine
-#     restart: unless-stopped
-#     command: ["redis-server", "--appendonly", "yes"]
-#     # Publié pour l'exécution de Django hors Docker (développement local).
-#     ports:
-#       - "${REDIS_PORT_PUBLISHED:-6379}:6379"
-#     volumes:
-#       - gridd_redis_data:/data
-#     healthcheck:
-#       test: ["CMD", "redis-cli", "ping"]
-#       interval: 5s
-#       timeout: 3s
-#       retries: 10
-
-# volumes:
-#   gridd_postgres_data:
-#   gridd_redis_data:
