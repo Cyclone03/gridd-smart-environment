@@ -12,9 +12,12 @@ services:
   gridd-web:
     image: ${GRIDD_WEB_IMAGE:-gridd-web:latest}
     build:
-      context: ./apps/web
+      context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
     environment:
       # Adresse de l'API vue par le navigateur ; modifiable sans recompiler.
       GRIDD_API_URL: ${GRIDD_API_URL:-}

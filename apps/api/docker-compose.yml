@@ -5,11 +5,13 @@ services:
   api:
     image: ${GRIDD_API_IMAGE:-gridd-api:latest}
     build:
-      context: ./apps/api
+      context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    # ports:
-    #   - "${API_PORT:-8000}:8000"
+    env_file:
+      - .env
+    ports:
+      - "${API_PORT:-8000}:8000"
     healthcheck:
       test:
         - CMD
@@ -24,9 +26,11 @@ services:
   kafka-consumer:
     image: ${GRIDD_API_IMAGE:-gridd-api:latest}
     build:
-      context: ./apps/api
+      context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    env_file:
+      - .env
     command: ["python", "manage.py", "consume_kafka"]
     depends_on:
       api:
