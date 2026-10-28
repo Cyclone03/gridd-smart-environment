@@ -16,6 +16,7 @@ x-api-env: &api-env
   DB_HOST: ${CONTAINER_DB_HOST:-postgres}
   DB_PORT: ${CONTAINER_DB_PORT:-5432}
   REDIS_URL: ${CONTAINER_REDIS_URL:-redis://redis:6379/0}
+  KAFKA_CA_CERT_PATH: ${KAFKA_CA_CERT_PATH:-/app/secrets/gridd-kafka-ca.crt}
 
 services:
   api:
@@ -32,11 +33,11 @@ services:
       RUN_MIGRATIONS: "true"
     ports:
       - "${API_PORT:-8000}:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    #   redis:
+    #     condition: service_healthy
 
   kafka-consumer:
     image: ${GRIDD_API_IMAGE:-gridd-api:latest}
@@ -47,7 +48,7 @@ services:
         required: false
     environment:
       <<: *api-env
-      KAFKA_CA_CERT_PATH: /app/secrets/gridd-kafka-ca.crt
+      # KAFKA_CA_CERT_PATH: /app/secrets/gridd-kafka-ca.crt
     volumes:
       - ./secrets:/app/secrets:ro
     command: ["python", "manage.py", "consume_kafka"]
@@ -58,38 +59,38 @@ services:
       api:
         condition: service_healthy
 
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DB_NAME:-gridd}
-      POSTGRES_USER: ${DB_USER:-gridd}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?Renseigner DB_PASSWORD dans .env}
-    ports:
-      - "${DB_PORT_PUBLISHED:-5433}:5432"
-    volumes:
-      - gridd_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+#   postgres:
+#     image: postgres:16-alpine
+#     restart: unless-stopped
+#     environment:
+#       POSTGRES_DB: ${DB_NAME:-gridd}
+#       POSTGRES_USER: ${DB_USER:-gridd}
+#       POSTGRES_PASSWORD: ${DB_PASSWORD:?Renseigner DB_PASSWORD dans .env}
+#     ports:
+#       - "${DB_PORT_PUBLISHED:-5433}:5432"
+#     volumes:
+#       - gridd_postgres_data:/var/lib/postgresql/data
+#     healthcheck:
+#       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+#       interval: 5s
+#       timeout: 3s
+#       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    # Publié pour l'exécution de Django hors Docker (développement local).
-    ports:
-      - "${REDIS_PORT_PUBLISHED:-6379}:6379"
-    volumes:
-      - gridd_redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+#   redis:
+#     image: redis:7-alpine
+#     restart: unless-stopped
+#     command: ["redis-server", "--appendonly", "yes"]
+#     # Publié pour l'exécution de Django hors Docker (développement local).
+#     ports:
+#       - "${REDIS_PORT_PUBLISHED:-6379}:6379"
+#     volumes:
+#       - gridd_redis_data:/data
+#     healthcheck:
+#       test: ["CMD", "redis-cli", "ping"]
+#       interval: 5s
+#       timeout: 3s
+#       retries: 10
 
-volumes:
-  gridd_postgres_data:
-  gridd_redis_data:
+# volumes:
+#   gridd_postgres_data:
+#   gridd_redis_data:
