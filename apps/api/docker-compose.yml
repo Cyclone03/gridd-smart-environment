@@ -31,6 +31,8 @@ services:
     restart: unless-stopped
     env_file:
       - apps/api/.env
+    volumes:
+      - ../files/gridd-kafka-ca.crt:/app/secrets/gridd-kafka-ca.crt:ro
     command: ["python", "manage.py", "consume_kafka"]
     depends_on:
       api:
