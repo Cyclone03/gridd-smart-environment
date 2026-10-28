@@ -9,7 +9,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
-      - - apps/api/.env
+      - apps/api/.env
     ports:
       - "${API_PORT:-8000}:8000"
     healthcheck:
@@ -30,7 +30,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
-      - - apps/api/.env
+      - apps/api/.env
     command: ["python", "manage.py", "consume_kafka"]
     depends_on:
       api:

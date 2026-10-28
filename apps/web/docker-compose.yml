@@ -16,7 +16,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
-      - path: .env
+      - path: apps/web/.env
         required: false
     environment:
       # Adresse de l'API vue par le navigateur ; modifiable sans recompiler.
