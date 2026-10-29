@@ -45,7 +45,7 @@ export function LoginView() {
       />
       <section className="login-card">
         <LoginForm submitting={submitting} serverError={error} onSubmit={submit} />
-        <p className="muted-note">Les comptes sont créés par un administrateur dans l’administration Django.</p>
+        {/* <p className="muted-note">Les comptes sont créés par un administrateur dans l’administration Django.</p> */}
       </section>
     </main>
   );

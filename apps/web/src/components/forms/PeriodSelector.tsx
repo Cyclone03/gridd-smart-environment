@@ -133,15 +133,21 @@ export function PeriodSelector({
           </>
         )}
         <div className="period-actions">
-          <button type="submit" className="primary-button" disabled={busy && !pending}>
-            <Check size={15} aria-hidden="true" /> Appliquer
-          </button>
-          {onRefresh && (
-            <button type="button" className="secondary-button" onClick={onRefresh} disabled={busy} title="Actualiser">
-              <RefreshCw size={15} className={busy ? "spin" : undefined} aria-hidden="true" />
-              <span className="sr-only">Actualiser les données</span>
-            </button>
-          )}
+          <div className="period-actions">
+            {draft.selection === "custom" && (
+              <button type="submit" className="primary-button" disabled={busy}>
+                <Check size={15} aria-hidden="true" />
+                Appliquer
+              </button>
+            )}
+
+            {onRefresh && (
+              <button type="button" className="secondary-button" onClick={onRefresh} disabled={busy} title="Actualiser">
+                <RefreshCw size={15} className={busy ? "spin" : undefined} aria-hidden="true" />
+                <span className="sr-only">Actualiser les données</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
       <p className="period-applied" aria-live="polite">
