@@ -22,6 +22,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
+    volumes:
+      - ../files/gridd-kafka-ca.crt:/app/secrets/gridd-kafka-ca.crt:ro
 
   kafka-consumer:
     image: ${GRIDD_API_IMAGE:-gridd-api:latest}
