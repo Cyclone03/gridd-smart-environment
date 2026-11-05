@@ -1,147 +1,39 @@
-# Démarrage autonome de l'API GRIDD et de ses dépendances.
-#
-#   cp .env.example .env      # puis renseigner DJANGO_SECRET_KEY, DB_PASSWORD…
-#   docker compose up -d --build                 # api + workers + kafka + postgres + redis
-#   docker compose --profile simulator up -d     # + capteurs simulés
-#
-# Architecture : l'API (Daphne) sert le REST et les WebSocket ; le service
-# « workers » exécute les consommateurs Kafka de chaque module (ingestion,
-# database, alarms, realtime). Les modules ne communiquent que par Kafka.
-#
-# Capteurs réels du Kafka GRIDD : renseigner KAFKA_SENSORS_* dans .env et
-# placer le certificat CA dans ./secrets/gridd-kafka-ca.crt.
-#
-# Services externes (PostgreSQL, Redis, Kafka gérés) : renseigner
-# CONTAINER_DB_HOST, CONTAINER_DB_PORT, CONTAINER_REDIS_URL et
-# CONTAINER_KAFKA_BOOTSTRAP_SERVERS dans .env.
-name: gridd-api
-
-# Adresses vues depuis les conteneurs. Elles remplacent DB_HOST, DB_PORT,
-# REDIS_URL et KAFKA_BOOTSTRAP_SERVERS du fichier .env, qui visent
-# l'exécution hors Docker (localhost).
-x-api-env: &api-env
-  DB_ENGINE: postgres
-  DB_HOST: ${CONTAINER_DB_HOST:-postgres}
-  DB_PORT: ${CONTAINER_DB_PORT:-5432}
-  REDIS_URL: ${CONTAINER_REDIS_URL:-redis://redis:6379/0}
-  EVENT_BUS: kafka
-  KAFKA_BOOTSTRAP_SERVERS: ${CONTAINER_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
-
-x-api-service: &api-service
-  image: ${GRIDD_API_IMAGE:-gridd-api:latest}
-  restart: unless-stopped
-  env_file:
-    - path: .env
-      required: false
 
 services:
-  api:
-    <<: *api-service
+  gridd_api:
+    image: ${GRIDD_IMAGE:-gridd-api:latest}
     build:
       context: .
-      dockerfile: Dockerfile
-    environment:
-      <<: *api-env
-      RUN_MIGRATIONS: "true"
-    ports:
-      - "${API_PORT:-8000}:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-
-  workers:
-    <<: *api-service
-    environment:
-      <<: *api-env
-      KAFKA_SENSORS_CA_CERT_PATH: /app/secrets/gridd-kafka-ca.crt
-    volumes:
-      - ./secrets:/app/secrets:ro
-    # Tous les modules dans un processus ; pour les séparer, dupliquer ce
-    # service avec « --module ingestion », « --module database »…
-    command: ["python", "manage.py", "run_consumers"]
-    # Pas de contrôle HTTP : processus de consommation sans port exposé.
-    healthcheck:
-      disable: true
-    depends_on:
-      api:
-        condition: service_healthy
-
-  simulator:
-    <<: *api-service
-    profiles: ["simulator"]
-    environment:
-      <<: *api-env
-    command: ["python", "manage.py", "simulate_gridd", "--interval", "30"]
-    healthcheck:
-      disable: true
-    depends_on:
-      workers:
-        condition: service_started
-
-  kafka:
-    # Kafka mono-nœud (KRaft) pour le développement et les petites installations.
-    # Les messages ne sont que des données en transit : ils sont conservés tant
-    # que le conteneur existe (perdus après « docker compose down »).
-    image: apache/kafka:3.8.0
+      dockerfile: ./docker/Dockerfile
     restart: unless-stopped
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,HOST://:9094
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,HOST://localhost:${KAFKA_PORT_PUBLISHED:-9094}
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-    # Publié pour l'exécution de Django hors Docker (développement local).
-    ports:
-      - "${KAFKA_PORT_PUBLISHED:-9094}:9094"
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    # depends_on:
+    #   redis:
+    #     condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
-      interval: 10s
-      timeout: 10s
-      retries: 12
-      start_period: 20s
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
-  postgres:
-    image: postgres:16-alpine
+  gridd_kafka:
+    image: ${GRIDD_IMAGE:-gridd-api:latest}
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DB_NAME:-gridd}
-      POSTGRES_USER: ${DB_USER:-gridd}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?Renseigner DB_PASSWORD dans .env}
-    ports:
-      - "${DB_PORT_PUBLISHED:-5433}:5432"
-    volumes:
-      - gridd_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+    env_file:
+      - .env
+    command:
+      - python
+      - manage.py
+      - consume_kafka
+    # depends_on:
+    #   redis:
+    #     condition: service_healthy
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "${REDIS_PORT_PUBLISHED:-6379}:6379"
-    volumes:
-      - gridd_redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-volumes:
-  gridd_postgres_data:
-  gridd_redis_data:
