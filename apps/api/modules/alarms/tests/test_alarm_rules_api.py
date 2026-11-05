@@ -134,7 +134,12 @@ class AlarmRulesApiTests(TestCase):
         self.assertEqual(self.client_manager.patch(f"{self.url}999/", {"enabled": False}, format="json").status_code, 404)
 
     def test_persistence_unavailable_returns_503(self):
-        with patch.object(CommandGateway, "send", side_effect=CommandTimeout("pas de réponse")):
+        with (
+            patch.object(CommandGateway, "send", side_effect=CommandTimeout("pas de réponse")),
+            self.assertLogs("shared.http.api_exception_handler", level="WARNING") as logs,
+        ):
             response = self.client_manager.post(self.url, self.payload(), format="json")
         self.assertEqual(response.status_code, 503)
         self.assertIn("detail", response.json())
+        # La cause réelle n'est pas renvoyée au client mais doit figurer dans les journaux.
+        self.assertIn("CommandTimeout : pas de réponse", logs.output[0])

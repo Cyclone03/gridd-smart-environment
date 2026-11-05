@@ -14,11 +14,19 @@ class SubscriptionRegistry:
         return subscriptions
 
     def select(self, names=None):
+        """Abonnements à démarrer. Un nom de module inclut ses abonnements
+        secondaires : ``database`` sélectionne aussi ``database-commands``."""
         subscriptions = self.all()
         if not names:
             return subscriptions
         known = {subscription.name for subscription in subscriptions}
+        known |= {self._module_of(name) for name in known}
         unknown = sorted(set(names) - known)
         if unknown:
-            raise ValueError(f"Module(s) sans abonnement : {', '.join(unknown)}. Disponibles : {', '.join(sorted(known))}.")
-        return [subscription for subscription in subscriptions if subscription.name in names]
+            available = ", ".join(sorted(known))
+            raise ValueError(f"Module(s) sans abonnement : {', '.join(unknown)}. Disponibles : {available}.")
+        return [item for item in subscriptions if item.name in names or self._module_of(item.name) in names]
+
+    @staticmethod
+    def _module_of(subscription_name):
+        return subscription_name.split("-", 1)[0]

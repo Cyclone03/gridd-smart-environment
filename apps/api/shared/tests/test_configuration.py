@@ -2,6 +2,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
 from shared.caching.local_cache import LocalCache
+from shared.contracts.topics import Topics
 from shared.messaging.kafka_connection_config import KafkaConnectionConfig
 from shared.messaging.subscription_registry import SubscriptionRegistry
 
@@ -43,8 +44,22 @@ class LocalCacheTests(SimpleTestCase):
 class SubscriptionRegistryTests(SimpleTestCase):
     def test_each_consuming_module_declares_its_subscription(self):
         subscriptions = {item.name: item for item in SubscriptionRegistry().all()}
-        self.assertEqual(set(subscriptions), {"database", "ingestion", "alarms", "comfort", "energy", "realtime"})
+        self.assertEqual(
+            set(subscriptions),
+            {"database", "database-commands", "ingestion", "alarms", "comfort", "energy", "realtime"},
+        )
         self.assertTrue(subscriptions["ingestion"].start_at_live_edge)
         self.assertEqual(subscriptions["ingestion"].connection, "sensors")
         with self.assertRaises(ValueError):
             SubscriptionRegistry().select(["inconnu"])
+
+    def test_commands_have_their_own_database_consumer(self):
+        subscriptions = {item.name: item for item in SubscriptionRegistry().all()}
+        commands = set(subscriptions["database-commands"].topics)
+        self.assertEqual(commands, set(Topics.commands()))
+        self.assertFalse(commands & set(subscriptions["database"].topics))
+        self.assertIn(Topics.ingestion_observations(), subscriptions["database"].topics)
+
+    def test_selecting_a_module_includes_its_secondary_subscriptions(self):
+        names = {item.name for item in SubscriptionRegistry().select(["database"])}
+        self.assertEqual(names, {"database", "database-commands"})

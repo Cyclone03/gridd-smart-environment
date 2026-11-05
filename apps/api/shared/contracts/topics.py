@@ -65,6 +65,11 @@ class Topics:
         """Topics que le module Database persiste (DATABASE_SUBSCRIBED_TOPICS)."""
         return tuple(settings.DATABASE_SUBSCRIBED_TOPICS)
 
+    @classmethod
+    def commands(cls) -> tuple[str, ...]:
+        """Topics de commandes (requête-réponse avec l'API)."""
+        return (cls.alarms_commands(), cls.comfort_commands(), cls.energy_commands())
+
     @staticmethod
     def internal() -> tuple[str, ...]:
         """Topics produits par le backend lui-même."""

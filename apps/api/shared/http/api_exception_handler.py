@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.response import Response
@@ -7,6 +9,8 @@ from shared.messaging import CommandFailed, MessagingUnavailable
 from shared.periods import PeriodParamError
 
 from .service_unavailable import ServiceUnavailable
+
+logger = logging.getLogger(__name__)
 
 
 class ApiExceptionHandler:
@@ -54,6 +58,8 @@ class ApiExceptionHandler:
                 return ValidationError(exc.errors or {"non_field_errors": [exc.message]})
             return APIException(exc.message)
         if isinstance(exc, MessagingUnavailable):
+            # Le client reçoit un message générique ; la cause reste dans les journaux.
+            logger.warning("Réponse 503 — %s : %s", type(exc).__name__, exc)
             return ServiceUnavailable()
         return exc
 

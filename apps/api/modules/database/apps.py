@@ -18,10 +18,13 @@ class DatabaseConfig(ModuleConfig):
 
         from .consumers.persistence_consumer import PersistenceConsumer
 
+        # Les commandes ont leur propre consommateur : une réponse attendue par
+        # l'API ne doit jamais patienter derrière un arriéré de mesures.
+        topics = Topics.database_subscriptions()
+        commands = tuple(topic for topic in topics if topic in Topics.commands())
+        events = tuple(topic for topic in topics if topic not in commands)
         return [
-            Subscription(
-                name="database",
-                topics=Topics.database_subscriptions(),
-                handler_factory=PersistenceConsumer.build,
-            )
+            Subscription(name=name, topics=group, handler_factory=PersistenceConsumer.build)
+            for name, group in (("database", events), ("database-commands", commands))
+            if group
         ]
