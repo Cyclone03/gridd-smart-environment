@@ -1,408 +1,173 @@
-# GRIDD Smart Environment
+# GRIDD — API
 
-Plateforme de supervision environnementale du GRIDD. Le backend Django reçoit
-les observations Kafka, les conserve dans PostgreSQL et les diffuse en temps
-réel au dashboard React avec Django Channels et Redis.
+Backend Django de GRIDD, organisé en **modules autonomes qui ne communiquent
+que par Kafka**. Les mesures des capteurs sont validées et qualifiées
+(`ingestion`), enregistrées par le seul module autorisé à écrire en base
+(`database`), puis exploitées par trois services : alarmes (`alarms`),
+confort thermique (`comfort`) et estimation énergétique (`energy`). Tout est
+diffusé en temps réel (`realtime`). L'API REST et les WebSocket servent le frontend
+séparé [`web/`](../../web/README.md).
 
-## Architecture
+Architecture détaillée : [`docs/architecture.md`](../../docs/architecture.md).
+Topics et événements : [`docs/events.md`](../../docs/events.md).
+
+## Processus
+
+| Processus | Commande | Rôle |
+|---|---|---|
+| Serveur ASGI | `daphne config.asgi:application` (ou `manage.py runserver`) | API REST, WebSocket, admin |
+| Consommateurs | `manage.py run_consumers [--module …]` | Modules `ingestion`, `database`, `alarms`, `comfort`, `energy`, `realtime` (avec `EVENT_BUS=kafka`) |
+| Simulateur | `manage.py simulate_gridd --interval 30` | Mesures de démonstration sur les topics capteurs |
+| Kafka | — | Bus d'événements entre modules |
+| PostgreSQL | — | Stockage (écrit uniquement par `database`) |
+| Redis | — | Diffusion temps réel entre processus |
+
+## Organisation
 
 ```text
-Kafka GRIDD ─┐
-             ├─> Django ─> PostgreSQL ─> API REST ─┐
-Simulateur ──┘       └─> Redis / WebSocket ────────┼─> Dashboard React
-                                                   └─> Alertes et historique
+config/                 settings.py, urls.py (routage HTTP), asgi.py (routage WebSocket)
+shared/                 noyau commun — pas un module métier
+├── messaging/          enveloppe d'événement, bus Kafka / mémoire, consommateurs, requête-réponse
+├── contracts/          noms des topics, types d'événements
+├── metrics/            catalogue des mesures et opérateurs
+├── periods/            périodes d'analyse (start/end, granularité, créneaux)
+├── http/               format d'erreur, permissions de lecture publique
+├── caching/            vue locale activable (cohérence avec Kafka)
+└── management/commands/run_consumers.py
+modules/
+├── database/           models/, migrations/, admin/, writers/, services/, consumers/, producers/
+├── ingestion/          parsers/, domain/ (validation, qualité), repositories/, stores/, services/, consumers/, producers/
+├── alarms/             controllers/, serializers/, services/, domain/ (moteur), repositories/, stores/, consumers/, producers/
+├── comfort/            confort thermique : domain/ (plages, évaluation), services/, consumers/, producers/, API
+├── energy/             énergie estimée : domain/ (modèle, agrégation), services/, consumers/, producers/, API
+├── observations/       zones, capteurs, mesures (lecture)
+├── history/            historique agrégé (lecture)
+├── realtime/           WebSocket et diffusion
+├── health/             contrôle de santé
+└── simulator/          capteurs simulés
+tests/                  règles d'architecture, routage, utilitaires de test
+docker/entrypoint.sh
 ```
 
-Le dépôt contient deux applications :
+Règles (vérifiées par `tests/test_architecture.py`) : une classe par fichier,
+aucun import entre modules (hors `shared` et lecture de
+`modules.database.models`), aucune écriture en base hors de `database`,
+contrôleurs sans accès aux données.
 
-```text
-gridd_django_project/
-├── frontend/       # React, TypeScript, Vite et Recharts
-└── gridd_django/   # Django, API REST, Channels et ingestion Kafka
-```
+## Installation locale
 
-## Prérequis
-
-Pour une installation locale sous Windows :
-
-- Windows 10 ou 11 avec PowerShell;
-- Python 3.12 ou plus récent;
-- Docker Desktop avec Docker Compose;
-- Node.js `20.19+` ou `22.12+`;
-- npm, installé avec Node.js;
-- accès au serveur Kafka du GRIDD pour les données réelles;
-- identifiants Kafka et certificat CA fournis par le GRIDD.
-
-Git est recommandé, mais il n'est pas nécessaire pour lancer l'application.
-
-### Ports utilisés
-
-| Service | Port | Utilisation |
-|---|---:|---|
-| Django / Daphne | 8000 | Dashboard, API et WebSockets |
-| PostgreSQL | 5433 | Base locale exposée par Docker |
-| Redis | 6379 | Diffusion des événements Channels |
-| Vite | 5173 | Développement du frontend seulement |
-
-Vérifier que ces ports ne sont pas déjà occupés.
-
-## Installation initiale
-
-Les commandes suivantes sont à exécuter une seule fois après le téléchargement
-du projet.
-
-### 1. Démarrer PostgreSQL et Redis
-
-```powershell
-cd gridd_django
-docker compose up -d
-docker compose ps
-```
-
-Docker crée des volumes persistants. Les données restent donc disponibles
-après un `docker compose stop` ou un redémarrage de l'ordinateur.
-
-### 2. Créer l'environnement Python
-
-Si le dossier `gridd_env` est déjà présent et fonctionnel, cette étape peut être
-ignorée.
-
-```powershell
-cd gridd_django
-python -m venv gridd_env
-.\gridd_env\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+```bash
+cd apps/api
+python -m venv .venv
+. .venv/bin/activate                    # Windows : .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+cp .env.example .env                    # Windows : Copy-Item .env.example .env
+docker compose up -d postgres redis     # PostgreSQL (5433) et Redis (6379)
+python manage.py migrate
+python manage.py seed_gridd             # zones, capteurs et règles de démonstration
+python manage.py createsuperuser
+python manage.py runserver              # http://127.0.0.1:8000
 ```
 
-Si PowerShell interdit l'activation du venv, les commandes peuvent être lancées
-directement avec :
+`.env.example` utilise `EVENT_BUS=memory` : sans Kafka, chaque processus
+exécute toute la chaîne. Dans un second terminal,
+`python manage.py simulate_gridd --interval 30` produit des mesures, qui
+traversent ingestion → database → alarms → realtime dans ce processus et
+arrivent au navigateur par Redis.
 
-```powershell
-.\gridd_env\Scripts\python.exe manage.py check
+### Avec Kafka (comme en production)
+
+```bash
+docker compose up -d postgres redis kafka   # Kafka publié sur localhost:9094
+# .env : EVENT_BUS=kafka
+python manage.py runserver                  # terminal 1 : API
+python manage.py run_consumers              # terminal 2 : modules
+python manage.py simulate_gridd             # terminal 3 : capteurs simulés
 ```
 
-### 3. Créer le fichier d'environnement
+Sans Docker du tout : `DB_ENGINE=sqlite`, `REDIS_URL=` (vide), `EVENT_BUS=memory`.
+Le temps réel ne fonctionne alors qu'à l'intérieur d'un même processus.
 
-```powershell
-Copy-Item .env.example .env
+## Variables d'environnement
+
+Voir `.env.example` (commenté). Les principales :
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `DJANGO_SECRET_KEY` | — | Obligatoire si `DEBUG=false` |
+| `DEBUG` | `false` | Mode développement |
+| `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS` | — | Hôtes et origines autorisés |
+| `DB_ENGINE`, `DB_*` | `sqlite` | Base de données (`postgres` recommandé) |
+| `REDIS_URL` | vide | Couche Channels Redis ; vide = mémoire (un seul processus) |
+| `EVENT_BUS` | `memory` | `kafka` en production |
+| `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_SECURITY_PROTOCOL`, `KAFKA_USERNAME`… | `localhost:9092`, `PLAINTEXT` | Bus interne |
+| `KAFKA_SENSORS_*` | = bus interne | Cluster des topics capteurs (Kafka GRIDD) |
+| `KAFKA_TOPIC_*` | voir `docs/events.md` | Noms des topics |
+| `DATABASE_SUBSCRIBED_TOPICS` | sorties des modules métier | Topics persistés par `database` |
+| `KAFKA_CONSUMER_GROUP_PREFIX` | `gridd-backend` | Consumer group : `<préfixe>.<module>` |
+| `KAFKA_COMMAND_TIMEOUT_SECONDS` | `10` | Attente d'une réponse (règles, plages de confort, paramètres énergétiques) ; au-delà : 503 |
+| `KAFKA_MAX_ATTEMPTS`, `KAFKA_RETRY_DELAY_SECONDS` | `5`, `2` | Nouvelles tentatives sur erreur transitoire |
+| `KAFKA_AUTO_CREATE_TOPICS` | `true` | Création des topics internes au démarrage des consommateurs |
+| `COMFORT_MAX_INPUT_AGE_MINUTES`, `ENERGY_MAX_INPUT_AGE_MINUTES` | `30` | Âge maximal d'une mesure complémentaire |
+| `ENERGY_MAX_INTERVAL_MINUTES` | `15` | Écart maximal entre deux mesures intégrées |
+| `HISTORY_MAX_RANGE_DAYS`, `HISTORY_TARGET_POINTS`, `HISTORY_MAX_POINTS` | `31`, `400`, `3000` | Historique |
+
+## Accès
+
+Pas d'authentification pour le moment : lectures et écritures sont ouvertes.
+En production, restreindre l'accès à l'API par le réseau ou un proxy. L'admin
+Django (`/admin/`, compte créé avec `createsuperuser`) reste disponible pour
+la maintenance des données.
+
+## Capteurs réels (Kafka GRIDD)
+
+Placer le certificat CA dans `secrets/gridd-kafka-ca.crt` (exclu de Git et de
+l'image), puis dans `.env` : `KAFKA_SENSORS_BOOTSTRAP_SERVERS=kafka.gridd-dt.ca:9096`,
+`KAFKA_SENSORS_SECURITY_PROTOCOL=SASL_SSL`, `KAFKA_SENSORS_USERNAME`,
+`KAFKA_SENSORS_PASSWORD` et, hors Docker, `KAFKA_SENSORS_CA_CERT_PATH`.
+
+```bash
+python manage.py inspect_kafka --seconds 30           # lecture sans traitement
+python manage.py run_consumers                        # tous les modules
+python manage.py run_consumers --module ingestion --replay-backlog
+python manage.py run_consumers --module comfort --module energy
+python manage.py run_consumers --list                 # abonnements de chaque module
 ```
 
-Pour utiliser PostgreSQL et Redis fournis par `docker-compose.yml`, placer au
-minimum les valeurs suivantes dans `.env` :
+`ingestion` se place à la fin des partitions capteurs (plusieurs messages
+GRIDD n'ont pas d'horodatage : un retard rejoué apparaîtrait à tort comme
+actuel). Les topics internes, eux, sont toujours lus intégralement. Ne pas
+lancer le simulateur quand les topics capteurs visent le Kafka GRIDD.
 
-```dotenv
-DJANGO_SECRET_KEY=remplacer-par-une-cle-locale
-DEBUG=true
-ALLOWED_HOSTS=127.0.0.1,localhost
+## Docker
 
-DB_ENGINE=postgres
-DB_NAME=gridd
-DB_USER=gridd
-DB_PASSWORD=gridd_dev
-DB_HOST=localhost
-DB_PORT=5433
-
-REDIS_URL=redis://127.0.0.1:6379/0
+```bash
+cp .env.example .env          # DJANGO_SECRET_KEY, DB_PASSWORD, CORS_ALLOWED_ORIGINS…
+docker compose up -d --build                  # api + workers + kafka + postgres + redis
+docker compose --profile simulator up -d      # + capteurs simulés
+docker compose logs -f workers
+docker compose down                           # conserve les volumes PostgreSQL et Redis
 ```
 
-Ne jamais publier `.env`, les identifiants Kafka ou le certificat privé dans un
-dépôt Git.
+Voir [`../../docs/deployment.md`](../../docs/deployment.md).
 
-### 4. Configurer Kafka, si nécessaire
+## Tests
 
-Créer le dossier de certificat s'il n'existe pas :
-
-```powershell
-New-Item -ItemType Directory -Force .\secrets
+```bash
+python manage.py test
 ```
 
-Placer le certificat CA ici :
-
-```text
-gridd_django\secrets\gridd-kafka-ca.crt
-```
-
-Puis compléter `.env` :
-
-```dotenv
-KAFKA_ENABLED=true
-KAFKA_BOOTSTRAP_SERVERS=kafka.gridd-dt.ca:9096
-KAFKA_USERNAME=nom-utilisateur
-KAFKA_PASSWORD=mot-de-passe
-KAFKA_CA_CERT_PATH=C:\chemin\vers\gridd_django\secrets\gridd-kafka-ca.crt
-KAFKA_GROUP_ID=gridd-django-zone-dashboard-v1
-KAFKA_SECURITY_PROTOCOL=SASL_SSL
-KAFKA_SASL_MECHANISM=SCRAM-SHA-256
-```
-
-Les sujets Kafka ont déjà des valeurs par défaut dans `.env.example`.
-
-Pour travailler uniquement avec le simulateur :
-
-```dotenv
-KAFKA_ENABLED=false
-```
-
-### 5. Installer et compiler React
-
-```powershell
-cd frontend
-npm.cmd install
-npm.cmd run build
-```
-
-La compilation produit les fichiers servis par Django dans :
-
-```text
-gridd_django\static\dashboard\
-```
-
-Il n'est pas nécessaire de laisser un processus Node actif après cette
-compilation.
-
-### 6. Préparer Django
-
-```powershell
-cd gridd_django
-.\gridd_env\Scripts\python.exe manage.py migrate
-.\gridd_env\Scripts\python.exe manage.py seed_gridd
-.\gridd_env\Scripts\python.exe manage.py check
-```
-
-`seed_gridd` crée les zones et capteurs de départ. La commande peut être relancée
-si la base est vide.
-
-## Lancement quotidien
-
-Après avoir fermé tous les terminaux ou redémarré l'ordinateur, utiliser trois
-terminaux PowerShell.
-
-### Terminal 1 — PostgreSQL et Redis
-
-```powershell
-cd gridd_django
-docker compose up -d
-docker compose ps
-```
-
-Les services `postgres` et `redis` doivent être démarrés. Redis est indispensable
-aux WebSockets, même si les observations sont correctement enregistrées en base.
-
-### Terminal 2 — Django, API, React et WebSockets
-
-```powershell
-cd gridd_django
-.\gridd_env\Scripts\python.exe manage.py migrate
-.\gridd_env\Scripts\python.exe manage.py runserver
-```
-
-Le serveur doit rester actif dans ce terminal.
-
-### Terminal 3 — Événements Kafka
-
-Pour recevoir les données réelles :
-
-```powershell
-cd gridd_django
-.\gridd_env\Scripts\python.exe manage.py consume_kafka
-```
-
-Le terminal doit afficher :
-
-```text
-Consumer Kafka démarré.
-En attente des données GRIDD...
-```
-
-Le consumer doit être redémarré après une modification du code Python; il ne se
-recharge pas automatiquement comme le serveur Django de développement.
-
-Au démarrage, le consumer se place volontairement à la fin des partitions pour
-recevoir les mesures actuelles. Plusieurs messages GRIDD n'ont pas
-d'horodatage : rejouer un ancien retard les ferait apparaître à tort comme des
-mesures prises maintenant. Le mode `--replay-backlog` reste disponible pour une
-inspection volontaire des anciens messages.
-
-### Alternative — Simulateur local
-
-Pour tester sans Kafka réel, lancer ceci dans le terminal 3 :
-
-```powershell
-cd gridd_django
-.\gridd_env\Scripts\python.exe manage.py simulate_gridd --interval 30
-```
-
-Éviter de lancer Kafka et le simulateur en même temps, sauf si le mélange de
-données réelles et simulées est volontaire.
-
-Le simulateur fait évoluer les valeurs progressivement afin d'éviter des sauts
-artificiels. Les variations rapides, les valeurs physiquement impossibles et
-les capteurs dont la valeur reste bloquée sont signalés automatiquement. La
-vue historique permet de choisir une zone, une métrique et une date précise,
-puis de naviguer entre les semaines du lundi au dimanche.
+116 tests, avec le bus mémoire (aucun Kafka requis) : chaîne complète
+capteur → ingestion → database → alarms / comfort / energy → realtime,
+qualité des données, moteur d'alarmes, confort (niveaux, score, plages
+personnalisées, historique), énergie (modèle, intégration, intervalles
+simultanés, bilan, séries, paramètres), API, historique, idempotence du
+module Database, consommateur Kafka, requête-réponse, migrations et règles
+d'architecture.
 
 ## Adresses utiles
 
-- Dashboard React : http://127.0.0.1:8000/
-- Ancien dashboard Django : http://127.0.0.1:8000/legacy/
-- Administration Django : http://127.0.0.1:8000/admin/
-- API zones : http://127.0.0.1:8000/api/zones/
-- API capteurs : http://127.0.0.1:8000/api/sensors/
-- API observations : http://127.0.0.1:8000/api/observations/
-- API alertes : http://127.0.0.1:8000/api/alerts/
-- État du backend : http://127.0.0.1:8000/api/health/
-
-## Développement du frontend React
-
-Pour modifier React avec rechargement automatique, Django doit déjà fonctionner
-sur le port 8000. Ouvrir ensuite un autre terminal :
-
-```powershell
-cd frontend
-npm.cmd run dev
-```
-
-Ouvrir http://127.0.0.1:5173/. Vite redirige `/api` et `/ws` vers Django.
-
-Avant de revenir à la version servie sur le port 8000, recompiler :
-
-```powershell
-npm.cmd run typecheck
-npm.cmd run build
-```
-
-## Vérifications
-
-### Backend
-
-```powershell
-cd gridd_django
-.\gridd_env\Scripts\python.exe manage.py check
-.\gridd_env\Scripts\python.exe manage.py test core
-```
-
-### Frontend
-
-```powershell
-cd frontend
-npm.cmd run typecheck
-npm.cmd run build
-```
-
-### Services Docker
-
-```powershell
-cd gridd_django
-docker compose ps
-```
-
-## Arrêt propre
-
-1. Utiliser `Ctrl+C` dans le terminal Django.
-2. Utiliser `Ctrl+C` dans le terminal Kafka ou simulateur.
-3. Arrêter PostgreSQL et Redis :
-
-```powershell
-cd gridd_django
-docker compose stop
-```
-
-`docker compose stop` conserve les données. Ne pas utiliser
-`docker compose down -v` sauf si la suppression complète de la base locale est
-réellement voulue.
-
-## Résolution des problèmes
-
-### Le dashboard indique « Temps réel interrompu »
-
-- vérifier que Django fonctionne sur le port 8000;
-- vérifier Redis avec `docker compose ps`;
-- vérifier que `REDIS_URL=redis://127.0.0.1:6379/0` est correct;
-- actualiser la page après le redémarrage de Redis.
-
-### `InvalidChannelLayerError: Cannot import BACKEND 'channels_redis...'`
-
-Cette erreur signifie que `channels-redis` n'est pas installé dans
-l'environnement Python utilisé pour lancer Django. Installer les dépendances
-avec l'interpréteur du projet :
-
-```powershell
-cd gridd_django
-.\gridd_env\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-Vérifier ensuite que le paquet est disponible :
-
-```powershell
-.\gridd_env\Scripts\python.exe -m pip show channels-redis
-```
-
-Arrêter le serveur Django avec `Ctrl+C`, puis le redémarrer :
-
-```powershell
-.\gridd_env\Scripts\python.exe manage.py runserver
-```
-
-Après un rechargement de la page, le badge « Connexion en cours » doit devenir
-« Temps réel actif ».
-
-### Les données sont en base, mais le dashboard ne change pas
-
-- redémarrer `python manage.py consume_kafka` pour charger le code actuel;
-- vérifier que le terminal Kafka reçoit encore des messages;
-- vérifier que Redis est actif;
-- vérifier la console du navigateur pour une erreur WebSocket.
-
-### `KAFKA_ENABLED=false`
-
-Le consumer réel est volontairement désactivé. Modifier `.env` avec
-`KAFKA_ENABLED=true`, puis relancer `consume_kafka`.
-
-### Certificat Kafka introuvable
-
-Utiliser un chemin Windows absolu dans `KAFKA_CA_CERT_PATH` et vérifier que le
-fichier existe réellement.
-
-### Connexion PostgreSQL refusée
-
-- lancer `docker compose up -d`;
-- utiliser le port `5433`, et non le port interne Docker `5432`;
-- vérifier que `DB_NAME`, `DB_USER` et `DB_PASSWORD` correspondent au fichier
-  `docker-compose.yml`.
-
-### `npm.ps1 cannot be loaded`
-
-PowerShell bloque parfois le script `npm.ps1`. Utiliser `npm.cmd` :
-
-```powershell
-npm.cmd install
-npm.cmd run build
-```
-
-### Le frontend semble ancien après une modification
-
-Recompiler React avec `npm.cmd run build`, puis faire un rechargement forcé du
-navigateur avec `Ctrl+F5`.
-
-## Déploiement ASGI
-
-Le projet utilise ASGI, nécessaire aux WebSockets. Le conteneur Django démarre
-Daphne avec :
-
-```powershell
-daphne -b 0.0.0.0 -p 8000 config.asgi:application
-```
-
-Avant un déploiement, compiler React puis collecter les fichiers statiques :
-
-```powershell
-cd frontend
-npm.cmd run build
-
-cd ..\gridd_django
-.\gridd_env\Scripts\python.exe manage.py collectstatic --noinput
-```
-
-Le serveur Django, le consumer Kafka, Redis et PostgreSQL sont quatre processus
-distincts en déploiement et doivent tous être supervisés.
+- API : <http://127.0.0.1:8000/api/>
+- Santé : <http://127.0.0.1:8000/api/health/> (indique aussi `event_bus`)
+- Admin : <http://127.0.0.1:8000/admin/>
+- WebSocket : `ws://127.0.0.1:8000/ws/dashboard/`

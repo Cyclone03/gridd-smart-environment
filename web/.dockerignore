@@ -1,0 +1,19 @@
+# Dépendances et artefacts locaux (réinstallés / recompilés dans l'image)
+node_modules/
+dist/
+dist-server/
+coverage/
+*.tsbuildinfo
+
+# Secrets et configuration locale : jamais dans l'image
+.env
+.env.*
+!.env.example
+
+# Outillage
+.git
+.gitignore
+Dockerfile
+docker-compose*.yml
+README.md
+tests/
