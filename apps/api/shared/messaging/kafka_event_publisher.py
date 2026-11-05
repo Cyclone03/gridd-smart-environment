@@ -1,3 +1,5 @@
+import threading
+
 from .event_publisher import EventPublisher
 from .messaging_unavailable import MessagingUnavailable
 
@@ -8,11 +10,23 @@ class KafkaEventPublisher(EventPublisher):
     Chaque publication attend l'accusé de réception du broker : un
     consommateur ne valide son offset qu'une fois ses propres messages
     réellement publiés (aucune perte entre deux modules).
+
+    Le producteur n'est créé qu'à la première publication : un processus qui
+    ne fait que lire (requête GET de l'API) n'a pas besoin de joindre Kafka.
     """
 
-    def __init__(self, producer, flush_timeout=10.0):
-        self._producer = producer
+    def __init__(self, producer_factory, flush_timeout=10.0):
+        self._producer_factory = producer_factory
+        self._producer_instance = None
+        self._lock = threading.Lock()
         self._flush_timeout = flush_timeout
+
+    @property
+    def _producer(self):
+        with self._lock:
+            if self._producer_instance is None:
+                self._producer_instance = self._producer_factory()
+        return self._producer_instance
 
     def publish_raw(self, topic, value, key=None):
         errors = []

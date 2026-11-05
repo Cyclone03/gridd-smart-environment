@@ -77,7 +77,7 @@ class Messaging:
             self._publishers[connection] = (
                 self._publishers[same_cluster]
                 if same_cluster
-                else KafkaEventPublisher(factory.producer(), settings.KAFKA_PUBLISH_TIMEOUT_SECONDS)
+                else KafkaEventPublisher(factory.producer, settings.KAFKA_PUBLISH_TIMEOUT_SECONDS)
             )
         return self._publishers[connection]
 
