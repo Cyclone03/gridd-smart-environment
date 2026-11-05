@@ -1,19 +1,17 @@
 
+# Démarrage autonome de l'API GRIDD et du consommateur Kafka.
+
 services:
-  gridd_api:
-    image: ${GRIDD_IMAGE:-gridd-api:latest}
+  api:
+    image: ${GRIDD_API_IMAGE:-gridd-api:latest}
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ./apps/api
+      dockerfile: docker/Dockerfile
     restart: unless-stopped
     env_file:
-      - path: .env
-        required: false
-    expose:
-      - "8000"
-    # depends_on:
-    #   redis:
-    #     condition: service_healthy
+      - apps/api/.env
+    ports:
+      - "${API_PORT:-8000}:8000"
     healthcheck:
       test:
         - CMD
@@ -25,17 +23,17 @@ services:
       retries: 3
       start_period: 40s
 
-  gridd_kafka:
-    image: ${GRIDD_IMAGE:-gridd-api:latest}
+  kafka-consumer:
+    image: ${GRIDD_API_IMAGE:-gridd-api:latest}
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
-      - path: .env
-        required: false
-    command:
-      - python
-      - manage.py
-      - run_consumers
-    # depends_on:
-    #   redis:
-    #     condition: service_healthy
-
+      - apps/api/.env
+    volumes:
+      - ../files/gridd-kafka-ca.crt:/app/secrets/gridd-kafka-ca.crt:ro
+    command: ["python", "manage.py", "consume_kafka"]
+    depends_on:
+      api:
+        condition: service_healthy
