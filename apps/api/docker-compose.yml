@@ -32,7 +32,7 @@ services:
     command:
       - python
       - manage.py
-      - consume_kafka
+      - run_consumers
     # depends_on:
     #   redis:
     #     condition: service_healthy
