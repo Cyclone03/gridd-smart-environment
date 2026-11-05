@@ -6,8 +6,8 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     restart: unless-stopped
-    # env_file:
-    #   - .env
+    env_file:
+      - .env
     expose:
       - "8000"
     # depends_on:
@@ -27,8 +27,8 @@ services:
   gridd_kafka:
     image: ${GRIDD_IMAGE:-gridd-api:latest}
     restart: unless-stopped
-    # env_file:
-    #   - .env
+    env_file:
+      - .env
     command:
       - python
       - manage.py
