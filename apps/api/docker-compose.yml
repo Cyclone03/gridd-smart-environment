@@ -25,15 +25,15 @@ services:
 
   kafka-consumer:
     image: ${GRIDD_API_IMAGE:-gridd-api:latest}
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+    # build:
+    #   context: ./apps/api
+    #   dockerfile: docker/Dockerfile
     restart: unless-stopped
     env_file:
       - apps/api/.env
     volumes:
       - ../files/gridd-kafka-ca.crt:/app/secrets/gridd-kafka-ca.crt:ro
-    command: ["python", "manage.py", "consume_kafka"]
+    command: ["python", "manage.py", "run_consumers"]
     depends_on:
       api:
         condition: service_healthy
