@@ -59,7 +59,7 @@ export const PERIOD_PRESETS: PeriodPreset[] = [
 export const DEFAULT_PERIOD: ObservationPeriod = { kind: "preset", preset: "today" };
 
 /** Doit rester aligné sur HISTORY_MAX_RANGE_DAYS côté API. */
-export const MAX_RANGE_DAYS = 31;
+export const MAX_RANGE_DAYS = 365;
 
 /** Intervalle d'actualisation des graphiques sur une période glissante. */
 export const LIVE_PERIOD_REFRESH_MS = 60_000;

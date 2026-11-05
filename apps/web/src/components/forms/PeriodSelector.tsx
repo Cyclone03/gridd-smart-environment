@@ -1,5 +1,5 @@
-import { CalendarClock, Check, RefreshCw } from "lucide-react";
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { CalendarClock, RefreshCw } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { MAX_RANGE_DAYS, PERIOD_PRESETS } from "../../constants/periods";
 import {
   validateCustomRange,
@@ -10,7 +10,6 @@ import {
 import type { FieldErrors } from "../../types/common";
 import { toDateTimeLocalValue } from "../../utils/dates";
 import { formatRange } from "../../utils/format";
-import { samePeriod } from "../../utils/period";
 
 type Selection = PeriodPresetKey | "custom";
 
@@ -25,9 +24,9 @@ function draftFrom(period: ObservationPeriod, resolved: ResolvedPeriod) {
 /**
  * Sélecteur de période d'observation.
  *
- * L'utilisateur choisit une période prédéfinie ou une plage personnalisée,
- * puis l'applique avec « Appliquer ». La période réellement affichée reste
- * visible en permanence, ainsi que l'indication de modifications en attente.
+ * Les périodes prédéfinies sont appliquées immédiatement.
+ * Les périodes personnalisées sont validées et appliquées
+ * automatiquement lorsque les deux dates sont valides.
  */
 export function PeriodSelector({
   period,
@@ -45,85 +44,144 @@ export function PeriodSelector({
   maxRangeDays?: number;
 }) {
   const id = useId();
+
   const [draft, setDraft] = useState(() => draftFrom(period, resolved));
   const [errors, setErrors] = useState<FieldErrors<"start" | "end">>({});
 
   // Une période appliquée ailleurs (URL, navigation) réinitialise le brouillon.
-  const appliedKey = period.kind === "preset" ? period.preset : `${period.start}|${period.end}`;
+  const appliedKey =
+    period.kind === "preset"
+      ? period.preset
+      : `${period.start}|${period.end}`;
+
   useEffect(() => {
     setDraft(draftFrom(period, resolved));
     setErrors({});
   }, [appliedKey]);
 
-  const draftPeriod: ObservationPeriod | null =
-    draft.selection === "custom" ? null : { kind: "preset", preset: draft.selection };
-  const pending =
-    draft.selection === "custom"
-      ? period.kind !== "custom" ||
-        draft.start !== toDateTimeLocalValue(resolved.start) ||
-        draft.end !== toDateTimeLocalValue(resolved.end)
-      : !samePeriod(draftPeriod!, period);
+  /**
+   * Applique immédiatement une période prédéfinie.
+   */
+  const handlePresetChange = (selection: Selection) => {
+    setDraft((current) => ({
+      ...current,
+      selection,
+    }));
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (draft.selection !== "custom") {
-      setErrors({});
-      onApply({ kind: "preset", preset: draft.selection });
-      return;
+    setErrors({});
+
+    if (selection !== "custom") {
+      onApply({
+        kind: "preset",
+        preset: selection,
+      });
     }
-    const result = validateCustomRange(draft.start, draft.end, { maxRangeDays });
+  };
+
+  /**
+   * Valide et applique automatiquement une période personnalisée.
+   */
+  const handleCustomChange = (
+    field: "start" | "end",
+    value: string,
+  ) => {
+    const nextDraft = {
+      ...draft,
+      [field]: value,
+    };
+
+    setDraft(nextDraft);
+
+    const result = validateCustomRange(
+      nextDraft.start,
+      nextDraft.end,
+      { maxRangeDays },
+    );
+
     setErrors(result.errors);
-    if (result.start && result.end)
-      onApply({ kind: "custom", start: result.start.toISOString(), end: result.end.toISOString() });
+
+    // if (result.start && result.end) {
+    //   onApply({
+    //     kind: "custom",
+    //     start: result.start.toISOString(),
+    //     end: result.end.toISOString(),
+    //   });
+    // }
   };
 
   return (
-    <form className="period-selector" onSubmit={submit} aria-label="Période d’observation" noValidate>
+    <form
+      className="period-selector"
+      aria-label="Période d’observation"
+      noValidate
+      onSubmit={(event) => event.preventDefault()}
+    >
       <div className="period-fields">
         <div className="field">
           <label htmlFor={`${id}-preset`}>Période</label>
+
           <select
             id={`${id}-preset`}
             value={draft.selection}
-            onChange={(event) => setDraft((current) => ({ ...current, selection: event.target.value as Selection }))}
+            disabled={busy}
+            onChange={(event) =>
+              handlePresetChange(event.target.value as Selection)
+            }
           >
             {PERIOD_PRESETS.map((preset) => (
               <option key={preset.key} value={preset.key}>
                 {preset.label}
               </option>
             ))}
+
             <option value="custom">Période personnalisée…</option>
           </select>
         </div>
+
         {draft.selection === "custom" && (
           <>
             <div className="field">
               <label htmlFor={`${id}-start-input`}>Début</label>
+
               <input
                 id={`${id}-start-input`}
                 type="datetime-local"
                 value={draft.start}
                 max={toDateTimeLocalValue(new Date())}
+                disabled={busy}
                 aria-invalid={Boolean(errors.start)}
-                aria-describedby={errors.start ? `${id}-start` : undefined}
-                onChange={(event) => setDraft((current) => ({ ...current, start: event.target.value }))}
+                aria-describedby={
+                  errors.start ? `${id}-start` : undefined
+                }
+                onChange={(event) =>
+                  handleCustomChange("start", event.target.value)
+                }
               />
+
               {errors.start && (
                 <em className="field-error" id={`${id}-start`}>
                   {errors.start}
                 </em>
               )}
             </div>
+
             <div className="field">
               <label htmlFor={`${id}-end-input`}>Fin</label>
+
               <input
                 id={`${id}-end-input`}
                 type="datetime-local"
                 value={draft.end}
+                disabled={busy}
                 aria-invalid={Boolean(errors.end)}
-                aria-describedby={errors.end ? `${id}-end` : undefined}
-                onChange={(event) => setDraft((current) => ({ ...current, end: event.target.value }))}
+                aria-describedby={
+                  errors.end ? `${id}-end` : undefined
+                }
+                onChange={(event) =>
+                  handleCustomChange("end", event.target.value)
+                }
               />
+
               {errors.end && (
                 <em className="field-error" id={`${id}-end`}>
                   {errors.end}
@@ -132,26 +190,41 @@ export function PeriodSelector({
             </div>
           </>
         )}
+
         <div className="period-actions">
-          <button type="submit" className="primary-button" disabled={busy && !pending}>
-            <Check size={15} aria-hidden="true" /> Appliquer
-          </button>
           {onRefresh && (
-            <button type="button" className="secondary-button" onClick={onRefresh} disabled={busy} title="Actualiser">
-              <RefreshCw size={15} className={busy ? "spin" : undefined} aria-hidden="true" />
-              <span className="sr-only">Actualiser les données</span>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={onRefresh}
+              disabled={busy}
+              title="Actualiser"
+            >
+              <RefreshCw
+                size={15}
+                className={busy ? "spin" : ""}
+                aria-hidden="true"
+              />
+              <span className="sr-only">
+                Actualiser les données
+              </span>
             </button>
           )}
         </div>
       </div>
+
       <p className="period-applied" aria-live="polite">
         <CalendarClock size={14} aria-hidden="true" />
+
         <span>
           Période affichée : <strong>{resolved.label}</strong>
-          {period.kind === "preset" && <> · {formatRange(resolved.start, resolved.end)}</>}
+
+          {period.kind === "preset" && (
+            <> · {formatRange(resolved.start, resolved.end)}</>
+          )}
+
           {resolved.live && " · actualisation automatique"}
         </span>
-        {pending && <em className="period-pending">Modification non appliquée</em>}
       </p>
     </form>
   );
