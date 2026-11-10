@@ -62,19 +62,17 @@ src/
 ├── main.tsx, App.tsx      # point d'entrée, fournisseurs d'état, routeur
 ├── routes/                # table des routes (nom, chemin, métadonnées) et titre
 ├── layouts/               # AppLayout : en-tête, navigation, contenu
-├── views/                 # écrans : Overview, Spaces, Comfort, Energy, History, Alerts,
+├── views/                 # écrans : Overview, Spaces, History, Alerts,
 │                          #   AlarmRules, AlarmRuleEdit, NotFound
 ├── components/
 │   ├── common/            # éléments génériques (messages, en-têtes, cartes)
 │   ├── layout/            # barre supérieure, navigation
 │   ├── measurements/      # tuiles de mesure, cartes d'espace
 │   ├── charts/            # courbe d'historique, statistiques, corrélations
-│   ├── comfort/           # niveau de confort, carte d'espace, historique du confort
-│   ├── energy/            # répartition par espace, série par usage, tableau
-│   ├── forms/             # sélecteur de période, formulaire de règle, paramètres d'espace
+│   ├── forms/             # sélecteur de période, formulaire de règle
 │   └── alarms/            # alerte active, liste des règles
 ├── composables/           # hooks : chargement asynchrone, période, filtres, règles
-├── stores/                # état partagé du tableau de bord (mesures, alertes, confort)
+├── stores/                # état partagé du tableau de bord (mesures, alertes)
 ├── services/              # opérations fonctionnelles (une par ressource API)
 ├── requests/              # client HTTP, configuration API, WebSocket
 ├── resources/             # types des ressources API et validation
@@ -87,7 +85,7 @@ src/
 Règles de dépendance : `views` → `components`, `composables`, `stores` ;
 `composables`/`stores` → `services` → `requests`. Les composants n'appellent
 jamais l'API ; seul `requests/httpClient.ts` utilise `fetch`. Détails dans
-[`../docs/architecture.md`](../docs/architecture.md).
+[`../../docs/architecture.md`](../../docs/architecture.md).
 
 ## Docker
 
@@ -105,7 +103,7 @@ docker compose down
 - contrôle de santé `GET /healthz` ;
 - aucun secret ni `.env` copié dans l'image (`.dockerignore`).
 
-Voir [`../docs/deployment.md`](../docs/deployment.md).
+Voir [`../../docs/deployment.md`](../../docs/deployment.md).
 
 ## Routes
 
@@ -113,10 +111,8 @@ Pas d'authentification pour le moment : toutes les pages sont accessibles.
 
 | Chemin | Vue |
 |---|---|
-| `/` | Vue d'ensemble (dont confort et énergie estimée sur 24 h) |
-| `/spaces` | Espaces, avec leur niveau de confort |
-| `/comfort?zone=&period=` | Confort thermique : état actuel, historique, plages de confort |
-| `/energy?zone=&period=` | Énergie estimée : bilan par espace, détail, paramètres du modèle |
+| `/` | Vue d'ensemble des indicateurs environnementaux |
+| `/spaces` | Espaces et dernières mesures des capteurs |
 | `/history?zone=&metric=&period=` ou `&start=&end=` | Analyse historique et corrélations |
 | `/alerts` | Alertes actives, règles d'un espace, historique |
 | `/alarms/rules` | Règles d'alarme |

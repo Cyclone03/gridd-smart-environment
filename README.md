@@ -1,14 +1,9 @@
-# GRIDD — Confort et bien-être intérieur
+# GRIDD — Surveillance environnementale intérieure
 
 GRIDD collecte, surveille et analyse les conditions d'un espace intérieur
 (température, humidité, occupation et niveau sonore) à partir des capteurs
-publiés sur Kafka. Trois services exploitent ces données :
-
-- **alarmes** : règles configurables depuis l'interface, évaluées à chaque mesure ;
-- **confort thermique** : niveau et score de chaque espace d'après ses plages
-  de température et d'humidité ;
-- **consommation énergétique** : estimation par un modèle paramétrable
-  (éclairage, équipements, chauffage, climatisation).
+publiés sur Kafka. Des règles d'alarme configurables sont évaluées à chaque
+mesure.
 
 Les mesures se consultent aussi en temps réel et sur une période choisie
 (historique, corrélations). Pas d'authentification pour le moment.
@@ -18,7 +13,7 @@ dépendances, sa configuration, son Dockerfile et son cycle de déploiement :
 
 | Application | Dossier | Technologies | Rôle |
 |---|---|---|---|
-| Frontend | [`web/`](web/README.md) | React 19, TypeScript, Vite, React Router, Recharts, serveur Node.js | Interface de consultation et de configuration |
+| Frontend | [`apps/web/`](apps/web/README.md) | React 19, TypeScript, Vite, React Router, Recharts, serveur Node.js | Interface de consultation et de configuration |
 | API | [`apps/api/`](apps/api/README.md) | Django 5/6, Django REST Framework, Channels, PostgreSQL, Redis, Kafka | Modules autonomes reliés par Kafka : ingestion, persistance, alarmes, temps réel, API REST et WebSocket |
 
 Elles communiquent **uniquement** par l'API documentée dans
@@ -37,21 +32,21 @@ Architecture détaillée : [`docs/architecture.md`](docs/architecture.md).
 
 ```text
 gridd/
-├── web/                 # Frontend (voir web/README.md)
-│   ├── src/             # components, views, layouts, routes, services,
-│   │                    # requests, resources, composables, stores, …
-│   ├── server/          # serveur HTTP Node.js de production
-│   ├── tests/           # Vitest + Testing Library
-│   ├── Dockerfile · docker-compose.yml · .env.example
 ├── apps/
+│   ├── web/             # Frontend (voir apps/web/README.md)
+│   │   ├── src/         # components, views, layouts, routes, services,
+│   │   │                # requests, resources, composables, stores, …
+│   │   ├── server/      # serveur HTTP Node.js de production
+│   │   ├── tests/       # Vitest + Testing Library
+│   │   └── Dockerfile · docker-compose.yml · .env.example
 │   └── api/             # API Django (voir apps/api/README.md)
 │       ├── config/      # paramètres, routage HTTP et WebSocket
 │       ├── shared/      # noyau commun : messagerie Kafka, contrats, HTTP
-│       ├── modules/     # database, ingestion, alarms, comfort, energy,
-│       │                # observations, history, realtime, health, simulator
+│       ├── modules/     # database, ingestion, alarms, observations,
+│       │                # history, realtime, health, simulator
 │       ├── tests/       # règles d'architecture, routage
 │       ├── docker/      # point d'entrée du conteneur
-│       ├── Dockerfile · docker-compose.yml · .env.example
+│       └── Dockerfile · docker-compose.yml · .env.example
 ├── docs/                # documentation technique
 └── .github/workflows/   # intégration continue
 ```
@@ -67,7 +62,7 @@ docker compose exec api python manage.py seed_gridd        # données de démons
 docker compose exec api python manage.py createsuperuser
 
 # 2. Frontend (indépendant de l'API)
-cd ../../web
+cd ../web
 cp .env.example .env            # GRIDD_API_URL=http://localhost:8000
 docker compose up -d --build
 ```
@@ -83,7 +78,6 @@ Pour un environnement de développement sans Docker, voir
 |---|---|
 | [`docs/architecture.md`](docs/architecture.md) | Architecture modulaire, flux, règles, décisions |
 | [`docs/events.md`](docs/events.md) | Topics Kafka et contrat des événements |
-| [`docs/comfort-energy.md`](docs/comfort-energy.md) | Confort thermique et estimation énergétique : méthodes, paramètres |
 | [`docs/installation.md`](docs/installation.md) | Installation locale pas à pas |
 | [`docs/deployment.md`](docs/deployment.md) | Déploiement Docker et production |
 | [`docs/api.md`](docs/api.md) | Contrat de l'API REST et WebSocket |
@@ -93,8 +87,8 @@ Pour un environnement de développement sans Docker, voir
 ## Vérifications
 
 ```bash
-cd apps/api && python manage.py test           # 116 tests backend
-cd web && npm run typecheck && npm test        # 57 tests frontend
+cd apps/api && python manage.py test
+cd apps/web && npm run typecheck && npm test
 ```
 
 ## Données sensibles

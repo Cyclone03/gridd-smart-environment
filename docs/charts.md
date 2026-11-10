@@ -75,7 +75,7 @@ PeriodSelector ─ onApply ─► useObservationPeriod (URL ?period / ?start&end
 
 ### Ajuster les périodes proposées
 
-Les préréglages sont dans `web/src/constants/periods.ts` (`PERIOD_PRESETS`).
+Les préréglages sont dans `../apps/web/src/constants/periods.ts` (`PERIOD_PRESETS`).
 La limite de durée côté interface (`MAX_RANGE_DAYS`) doit rester alignée sur
 `HISTORY_MAX_RANGE_DAYS` de l'API. Les granularités possibles sont dans
 `apps/api/modules/history/domain/period_parser.py` (`BUCKET_CHOICES_MINUTES`).
@@ -90,15 +90,14 @@ Le panneau calcule, sur la période appliquée, le coefficient de Pearson entre
 chaque paire de mesures disponibles (au moins 8 créneaux communs), la valeur p
 (indicative), un éventuel effet retardé et la corrélation partielle pour
 repérer les liens indirects. Une corrélation n'implique pas de causalité.
-Code : `web/src/utils/correlation.ts` (calculs) et
-`web/src/utils/correlationInsights.ts` (interprétation).
+Code : `../apps/web/src/utils/correlation.ts` (calculs) et
+`../apps/web/src/utils/correlationInsights.ts` (interprétation).
 
 ## Autres indicateurs
 
 La **vue d'ensemble** affiche des moyennes sur les dernières mesures et des
-indices de confort indicatifs. Leurs repères (température et humidité de
-référence, capacité de 30 personnes…) sont regroupés dans
-`web/src/constants/comfort.ts` : ce ne sont pas des normes.
+indices indicatifs pour le niveau sonore et l'occupation. Leurs repères sont
+regroupés dans `../apps/web/src/constants/indicators.ts` : ce ne sont pas des normes.
 
 L'indicateur « Prochaine valeur (indicative) » reprend l'heuristique existante
 (dernière moyenne ± un pas fixe selon la tendance, `utils/prediction.ts`) ;

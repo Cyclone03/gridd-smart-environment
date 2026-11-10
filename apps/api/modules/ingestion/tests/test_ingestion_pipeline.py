@@ -74,8 +74,6 @@ class IngestionPipelineTests(TestCase):
         created = [(group, event) for group, event in channel_layer.events if event["type"] == "observation.created"]
         self.assertEqual([group for group, _ in created], ["dashboard", "zone_salle-cours"])
         self.assertEqual(created[0][1]["payload"]["id"], observation.pk)
-        # La température déclenche aussi une évaluation de confort, relayée à son tour.
-        self.assertIn("comfort.updated", {event["type"] for _, event in channel_layer.events})
 
     def test_rapid_temperature_change_creates_and_resolves_quality_alert(self):
         started_at = timezone.now() - timedelta(minutes=1)

@@ -50,7 +50,7 @@ Les nombres acceptent la virgule décimale (`21,5`).
 | Besoin | Règle |
 |---|---|
 | Température trop élevée | Température `>` 28 °C, durée 10 min, hystérésis 0,5 °C |
-| Humidité hors confort | Humidité *en dehors de* [30 ; 60] %, hystérésis 2 % |
+| Humidité hors plage de référence | Humidité *en dehors de* [30 ; 60] %, hystérésis 2 % |
 | Capacité dépassée | Occupation `>` 30 personnes, gravité critique |
 | Bruit prolongé | Niveau sonore `>` 70 dBA pendant 5 min, hystérésis 3 dBA |
 

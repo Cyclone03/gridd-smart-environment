@@ -2,8 +2,8 @@ from shared.module_config import ModuleConfig
 
 
 class RealtimeConfig(ModuleConfig):
-    """Module Realtime : WebSocket des tableaux de bord (mesures, alertes,
-    confort, énergie), alimenté par les faits persistés (``database.events``)."""
+    """Module Realtime : WebSocket des tableaux de bord (mesures et alertes),
+    alimenté par les faits persistés (``database.events``)."""
 
     name = "modules.realtime"
     label = "realtime"

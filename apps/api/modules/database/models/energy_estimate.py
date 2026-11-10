@@ -5,7 +5,7 @@ from .zone import Zone
 
 
 class EnergyEstimate(models.Model):
-    """Énergie estimée d'une zone sur un intervalle entre deux mesures."""
+    """Ancienne estimation conservée pour préserver les données déjà enregistrées."""
 
     zone = models.ForeignKey(Zone, on_delete=models.CASCADE, related_name="energy_estimates")
     # Observation qui clôt l'intervalle : rend la persistance idempotente.

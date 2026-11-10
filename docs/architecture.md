@@ -13,7 +13,7 @@ autonomes** qui ne communiquent **que par Kafka**.
                                        │ topics capteurs gridd.obs.*
 ┌──────────────────────────────────────▼──────────────────────────────────────────┐
 │                                     Kafka                                       │
-│  ingestion.observations · alarms.* · comfort.* · energy.* · database.*        │
+│  ingestion.observations · alarms.* · database.*                              │
 └────┬──────▲──────────┬──────▲─────────────┬──────▲──────────┬──────▲────────────┘
      │      │          │      │             │      │          │      │
 ┌────┼──────┼──────────┼──────┼─────────────┼──────┼──────────┼──────┼────────────┐
@@ -23,7 +23,7 @@ autonomes** qui ne communiquent **que par Kafka**.
 │ │ (capteurs) │ │ (seul à écrire)│ │ règles, alertes  │ │ WebSocket      │         │
 │ └────────────┘ └───────┬────────┘ └────────┬─────────┘ └───────┬────────┘         │
 │                        │ PostgreSQL        │                    │                 │
-│   comfort · energy (évaluent les mesures)  ·  observations · history · health  │
+│          observations · history · health                                     │
 │ ┌──────────────────────┴───────────────────┴────────────────────┴───────────────┐ │
 │ │              Routage : config/urls.py (REST) · config/asgi.py (WS)            │ │
 │ └───────────────────────────────────────▲───────────────────────────────────────┘ │
@@ -54,25 +54,23 @@ diffusait. Kafka n'était utilisé qu'en entrée et tous les composants
 | `history.py`, vue `zone_history` | **Conservés**, découpés : `PeriodParser`, `BucketAggregator`, `HistoryStatistics`, service, contrôleur | `modules/history/` |
 | `api.py`, `alarm_api.py` | **Refactorisés** en contrôleurs minces + services + repositories, contrat REST identique | `observations`, `alarms`, `health` |
 | `auth_api.py`, jetons, permissions | **Supprimés** (pas d'authentification pour le moment) ; page de connexion retirée du frontend | — |
-| Indice de confort calculé dans le navigateur | **Remplacé** par le module `comfort` (une seule source de vérité) | `modules/comfort/` |
+| Confort thermique et estimation énergétique | Retirés des services actifs; schéma historique conservé pour préserver les données | — |
 | Validation métier des règles dans le serializer | **Déplacée** dans `AlarmRuleValidator` (logique pure) | `modules/alarms/domain/` |
 | `realtime.py`, `consumers.py` (Channels) | **Déplacés** ; la diffusion part désormais des faits persistés | `modules/realtime/` |
 | Simulateur (écrivait en base) | **Refactorisé** : publie sur les topics capteurs comme un vrai capteur | `modules/simulator/` |
 | Admin Django | **Conservé**, une classe par fichier | `modules/database/admin/` |
-| Frontend `web/` | **Inchangé** : le contrat REST/WS est préservé | — |
+| Frontend `web/` | Déployé séparément; les routes confort thermique et énergie ont été retirées | — |
 
 ## Modules
 
 | Module | Responsabilité | Kafka : lit → publie | API |
 |---|---|---|---|
 | `ingestion` | Lire les mesures capteurs, valider (capteur, unité, valeur), contrôler la qualité | capteurs → `ingestion.observations` | — |
-| `database` | **Seul module qui écrit en base** : observations, zones, capteurs, alertes, états, règles, confort, énergie, paramètres des espaces | `DATABASE_SUBSCRIBED_TOPICS` → `database.events`, `database.replies` | admin Django |
+| `database` | **Seul module qui écrit en base** : observations, zones, capteurs, alertes, états et règles | `DATABASE_SUBSCRIBED_TOPICS` → `database.events`, `database.replies` | admin Django |
 | `alarms` | Règles d'alarme (CRUD), évaluation, alertes de qualité, consultation des alertes | `database.events` → `alarms.events`, `alarms.commands` | `/api/alarm-rules/`, `/api/alerts/` |
-| `realtime` | Diffuser aux navigateurs les faits persistés (mesures, alertes, confort, énergie) | `database.events` → (WebSocket) | `/ws/dashboard/`, `/ws/zones/<code>/` |
+| `realtime` | Diffuser aux navigateurs les faits persistés (mesures, alertes) | `database.events` → (WebSocket) | `/ws/dashboard/`, `/ws/zones/<code>/` |
 | `observations` | Consulter zones, capteurs et mesures | — | `/api/zones/`, `/api/sensors/`, `/api/observations/` |
 | `history` | Historique agrégé sur une période | — | `/api/zones/<code>/history/` |
-| `comfort` | Confort thermique (plages T°/HR par espace), historique, plages personnalisables | `database.events` → `comfort.events`, `comfort.commands` | `/api/comfort/…` |
-| `energy` | Estimation de la consommation (modèle paramétrable), bilan, séries, paramètres | `database.events` → `energy.events`, `energy.commands` | `/api/energy/…` |
 | `health` | Santé du processus | — | `/api/health/` |
 | `simulator` | Mesures de démonstration | → topics capteurs | — |
 
@@ -113,11 +111,7 @@ ajoute `models/`, `migrations/`, `admin/`, `provisioning/`.
    ses décisions (`alert.raised`, `alert.resolved`, `alarm_state.saved`).
 4. `database` les enregistre et publie `alerts.changed` si la liste des
    alertes actives a changé.
-5. En parallèle, `comfort` évalue le confort (température ou humidité) et
-   `energy` estime l'énergie de l'intervalle écoulé (température ou
-   occupation) ; `database` enregistre leurs résultats et publie
-   `comfort.persisted` / `energy.persisted`.
-6. `realtime` relaie mesures, alertes, confort et énergie aux navigateurs.
+5. `realtime` relaie les mesures et alertes persistées aux navigateurs.
 
 ### Requête de lecture (frontend)
 
@@ -126,8 +120,7 @@ ajoute `models/`, `migrations/`, `admin/`, `provisioning/`.
 
 ### Requête d'écriture (frontend)
 
-Exemple : `POST /api/alarm-rules/` (même principe pour les plages de confort
-et les paramètres énergétiques, avec `comfort.commands` et `energy.commands`).
+Exemple : `POST /api/alarm-rules/`.
 
 1. Le contrôleur valide la forme des données (serializer + `AlarmRuleValidator`).
 2. Le service envoie la commande `alarm_rule.create` sur `alarms.commands`
@@ -179,8 +172,6 @@ cette vue locale est désactivée.
 
 Conséquences :
 
-- `comfort` et `energy` sont sans état local (tout est relu en base) et
-  peuvent être dupliqués ;
 - `ingestion` et `alarms` tournent chacun en **une seule instance** (un
   événement `alarm_rule.changed` n'est remis qu'à une instance du groupe) ;
 - avec Kafka, la réponse à une modification de règle est renvoyée dès que la

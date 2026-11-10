@@ -100,13 +100,13 @@ export function PeriodSelector({
 
     setErrors(result.errors);
 
-    // if (result.start && result.end) {
-    //   onApply({
-    //     kind: "custom",
-    //     start: result.start.toISOString(),
-    //     end: result.end.toISOString(),
-    //   });
-    // }
+    if (result.start && result.end) {
+      onApply({
+        kind: "custom",
+        start: result.start.toISOString(),
+        end: result.end.toISOString(),
+      });
+    }
   };
 
   return (

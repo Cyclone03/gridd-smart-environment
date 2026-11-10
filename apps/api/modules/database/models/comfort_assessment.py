@@ -5,7 +5,7 @@ from .zone import Zone
 
 
 class ComfortAssessment(models.Model):
-    """Évaluation du confort thermique d'une zone à un instant donné."""
+    """Ancienne évaluation conservée pour préserver les données déjà enregistrées."""
 
     class Level(models.TextChoices):
         COMFORTABLE = "comfortable", "Confortable"

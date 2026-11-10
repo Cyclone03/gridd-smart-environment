@@ -15,6 +15,4 @@ urlpatterns = [
     path("api/", include("modules.history.urls")),
     path("api/", include("modules.observations.urls")),
     path("api/", include("modules.alarms.urls")),
-    path("api/", include("modules.comfort.urls")),
-    path("api/", include("modules.energy.urls")),
 ]

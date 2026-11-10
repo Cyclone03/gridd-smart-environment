@@ -1,8 +1,6 @@
 /**
  * Données partagées par toutes les vues : zones, dernières mesures, alertes
- * actives, confort actuel des zones, état du temps réel et alertes déjà
- * consultées. `energyRevision` augmente à chaque nouvelle estimation
- * d'énergie : les vues concernées s'en servent pour se recharger.
+ * actives, état du temps réel et alertes déjà consultées.
  *
  * Sources : chargement initial + rafraîchissement périodique (filet de
  * sécurité), complétés par le WebSocket (nouvelles mesures, changements
@@ -12,11 +10,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { DASHBOARD_REFRESH_MS, MAX_LIVE_OBSERVATIONS, STORAGE_KEYS } from "../constants/app";
 import { errorMessage } from "../requests/httpClient";
 import type { Alert } from "../resources/alert";
-import { applyComfortUpdate, type ZoneComfort } from "../resources/comfort";
 import type { Observation } from "../resources/observation";
 import type { Zone } from "../resources/zone";
 import { listActiveAlerts } from "../services/alertsService";
-import { getCurrentComfort } from "../services/comfortService";
 import { getLatestObservations } from "../services/observationsService";
 import { subscribeToDashboard } from "../services/realtimeService";
 import { listZones } from "../services/zonesService";
@@ -35,9 +31,6 @@ interface DashboardContextValue {
   zones: Zone[];
   latest: LatestReadings;
   alerts: Alert[];
-  /** Confort actuel des zones affichées. */
-  comfort: ZoneComfort[];
-  energyRevision: number;
   status: RealtimeStatus;
   loading: boolean;
   error: string | null;
@@ -64,8 +57,6 @@ export function DashboardProvider({ children, realtime = true }: { children: Rea
   const [zones, setZones] = useState<Zone[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [comfort, setComfort] = useState<ZoneComfort[]>([]);
-  const [energyRevision, setEnergyRevision] = useState(0);
   const [status, setStatus] = useState<RealtimeStatus>("connecting");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,16 +65,14 @@ export function DashboardProvider({ children, realtime = true }: { children: Rea
 
   const refresh = useCallback(async () => {
     try {
-      const [zoneList, latestObservations, activeAlerts, currentComfort] = await Promise.all([
+      const [zoneList, latestObservations, activeAlerts] = await Promise.all([
         listZones(),
         getLatestObservations(),
         listActiveAlerts(),
-        getCurrentComfort(),
       ]);
       setZones(zoneList);
       setObservations(latestObservations);
       setAlerts(activeAlerts);
-      setComfort(currentComfort);
       setLastUpdate(newestTimestamp(latestObservations));
       setError(null);
     } catch (reason) {
@@ -110,8 +99,6 @@ export function DashboardProvider({ children, realtime = true }: { children: Rea
     return subscribeToDashboard({
       onStatus: setStatus,
       onAlertsChanged: refreshAlerts,
-      onComfort: (update) => setComfort((current) => applyComfortUpdate(current, update)),
-      onEnergy: () => setEnergyRevision((value) => value + 1),
       onObservation: (observation) => {
         setObservations((current) => [observation, ...current].slice(0, MAX_LIVE_OBSERVATIONS));
         setLastUpdate(new Date(observationTime(observation)));
@@ -139,13 +126,10 @@ export function DashboardProvider({ children, realtime = true }: { children: Rea
 
   const value = useMemo<DashboardContextValue>(() => {
     const shownZones = visibleZones(zones);
-    const shownCodes = new Set(shownZones.map((zone) => zone.code));
     return {
       zones: shownZones,
       latest: latestByZone(observations, zones),
       alerts,
-      comfort: comfort.filter((zone) => shownCodes.has(zone.zone_code)),
-      energyRevision,
       status,
       loading,
       error,
@@ -160,8 +144,6 @@ export function DashboardProvider({ children, realtime = true }: { children: Rea
     zones,
     observations,
     alerts,
-    comfort,
-    energyRevision,
     status,
     loading,
     error,

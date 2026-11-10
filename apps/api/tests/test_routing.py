@@ -15,14 +15,15 @@ class RoutingTests(TestCase):
             "/api/observations/latest/",
             "/api/alerts/",
             "/api/alarm-rules/",
-            "/api/comfort/current/",
-            "/api/comfort/profiles/",
-            "/api/energy/summary/",
-            "/api/energy/profiles/",
         ]
         for path in paths:
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 200)
+
+    def test_retired_feature_routes_are_not_assembled(self):
+        for path in ["/api/comfort/current/", "/api/comfort/profiles/", "/api/energy/summary/", "/api/energy/profiles/"]:
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 404)
 
     def test_authentication_endpoints_are_removed(self):
         for path in ["/api/auth/token/", "/api/auth/me/", "/api/auth/logout/"]:

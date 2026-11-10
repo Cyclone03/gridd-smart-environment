@@ -4,11 +4,7 @@ from .zone import Zone
 
 
 class ComfortProfile(models.Model):
-    """Plages de confort personnalisées d'une zone.
-
-    Sans enregistrement, le module ``comfort`` applique les valeurs par
-    défaut du type d'espace.
-    """
+    """Ancien profil conservé pour préserver les données déjà enregistrées."""
 
     zone = models.OneToOneField(Zone, on_delete=models.CASCADE, related_name="comfort_profile")
     temperature_min = models.FloatField()

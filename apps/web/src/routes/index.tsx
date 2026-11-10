@@ -4,8 +4,6 @@ import { AppLayout } from "../layouts/AppLayout";
 import { AlarmRuleEditView } from "../views/AlarmRuleEditView";
 import { AlarmRulesView } from "../views/AlarmRulesView";
 import { AlertsView } from "../views/AlertsView";
-import { ComfortView } from "../views/ComfortView";
-import { EnergyView } from "../views/EnergyView";
 import { HistoryView } from "../views/HistoryView";
 import { NotFoundView } from "../views/NotFoundView";
 import { OverviewView } from "../views/OverviewView";
@@ -17,8 +15,6 @@ import { RouteTitle } from "./RouteTitle";
 const VIEWS: Record<RouteName, ComponentType> = {
   overview: OverviewView,
   spaces: SpacesView,
-  comfort: ComfortView,
-  energy: EnergyView,
   history: HistoryView,
   alerts: AlertsView,
   alarmRules: AlarmRulesView,

@@ -56,7 +56,7 @@ docker compose logs -f api workers
 | Service | Rôle | Notes |
 |---|---|---|
 | `api` | Daphne (ASGI) : REST, WebSocket, admin | applique les migrations au démarrage (`RUN_MIGRATIONS=true`) ; santé `GET /api/health/` ; publie les commandes d'écriture sur Kafka, donc monte aussi `./secrets` |
-| `workers` | `manage.py run_consumers` | modules `ingestion`, `database`, `alarms`, `comfort`, `energy`, `realtime` ; monte `./secrets` (certificat du Kafka GRIDD) |
+| `workers` | `manage.py run_consumers` | modules `ingestion`, `database`, `alarms`, `realtime` ; monte `./secrets` (certificat du Kafka GRIDD) |
 | `kafka` | Kafka 3.8 (KRaft, un nœud) | bus d'événements ; publié sur 9094 pour le développement hors Docker |
 | `simulator` | `manage.py simulate_gridd` | profil `simulator` ; mesures de démonstration |
 | `postgres` | PostgreSQL 16 | volume `gridd_postgres_data` ; publié sur 5433 |
@@ -94,7 +94,7 @@ puis `docker compose up -d --no-deps api workers`.
   En production, prévoir au moins 3 partitions et un facteur de réplication
   adapté au cluster.
 - Montée en charge : dédier un service par module avec
-  `run_consumers --module <module>`. `database`, `comfort`, `energy` et `realtime` peuvent être
+  `run_consumers --module <module>`. `database` et `realtime` peuvent être
   dupliqués (Kafka répartit les partitions entre les instances d'un module).
   `ingestion` et `alarms` gardent une vue locale de leur état (historique
   récent des capteurs, état des règles) : les laisser à **une instance** chacun,

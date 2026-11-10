@@ -5,14 +5,10 @@ from modules.database.producers.command_reply_producer import CommandReplyProduc
 from modules.database.producers.database_events_producer import DatabaseEventsProducer
 from modules.database.services.alarm_rule_persistence_service import AlarmRulePersistenceService
 from modules.database.services.alert_persistence_service import AlertPersistenceService
-from modules.database.services.comfort_persistence_service import ComfortPersistenceService
-from modules.database.services.energy_persistence_service import EnergyPersistenceService
 from modules.database.services.observation_persistence_service import ObservationPersistenceService
 from modules.database.writers.alarm_rule_state_writer import AlarmRuleStateWriter
 from modules.database.writers.alarm_rule_writer import AlarmRuleWriter
 from modules.database.writers.alert_writer import AlertWriter
-from modules.database.writers.comfort_writer import ComfortWriter
-from modules.database.writers.energy_writer import EnergyWriter
 from modules.database.writers.observation_writer import ObservationWriter
 from modules.database.writers.sensor_writer import SensorWriter
 from modules.database.writers.zone_writer import ZoneWriter
@@ -30,12 +26,10 @@ class PersistenceConsumer(EventHandler):
     avec ``reply_to``) reçoivent toujours une réponse, succès ou échec.
     """
 
-    def __init__(self, *, observations, alerts, rules, comfort, energy, replies):
+    def __init__(self, *, observations, alerts, rules, replies):
         self._observations = observations
         self._alerts = alerts
         self._rules = rules
-        self._comfort = comfort
-        self._energy = energy
         self._replies = replies
 
     @classmethod
@@ -58,8 +52,6 @@ class PersistenceConsumer(EventHandler):
                 producer=producer,
             ),
             rules=AlarmRulePersistenceService(rule_writer=AlarmRuleWriter(), producer=producer),
-            comfort=ComfortPersistenceService(zone_writer=zone_writer, comfort_writer=ComfortWriter(), producer=producer),
-            energy=EnergyPersistenceService(zone_writer=zone_writer, energy_writer=EnergyWriter(), producer=producer),
             replies=CommandReplyProducer(publisher),
         )
 
@@ -74,12 +66,6 @@ class PersistenceConsumer(EventHandler):
             EventTypes.ALARM_RULE_CREATE: lambda event: self._command(event, self._rules.create),
             EventTypes.ALARM_RULE_UPDATE: lambda event: self._command(event, self._rules.update),
             EventTypes.ALARM_RULE_DELETE: lambda event: self._command(event, self._rules.delete),
-            EventTypes.COMFORT_ASSESSED: lambda event: self._comfort.record_assessment(event.payload),
-            EventTypes.COMFORT_PROFILE_SAVE: lambda event: self._command(event, self._comfort.save_profile),
-            EventTypes.COMFORT_PROFILE_RESET: lambda event: self._command(event, self._comfort.reset_profile),
-            EventTypes.ENERGY_ESTIMATED: lambda event: self._energy.record_estimate(event.payload),
-            EventTypes.ENERGY_PROFILE_SAVE: lambda event: self._command(event, self._energy.save_profile),
-            EventTypes.ENERGY_PROFILE_RESET: lambda event: self._command(event, self._energy.reset_profile),
         }
 
     def _command(self, event, operation):

@@ -46,17 +46,18 @@ class SubscriptionRegistryTests(SimpleTestCase):
         subscriptions = {item.name: item for item in SubscriptionRegistry().all()}
         self.assertEqual(
             set(subscriptions),
-            {"database", "database-commands", "ingestion", "alarms", "comfort", "energy", "realtime"},
+            {"database", "database-commands", "ingestion", "alarms", "realtime"},
         )
         self.assertTrue(subscriptions["ingestion"].start_at_live_edge)
         self.assertEqual(subscriptions["ingestion"].connection, "sensors")
+        self.assertFalse(any("comfort" in topic or "energy" in topic for topic in Topics.internal()))
         with self.assertRaises(ValueError):
             SubscriptionRegistry().select(["inconnu"])
 
     def test_commands_have_their_own_database_consumer(self):
         subscriptions = {item.name: item for item in SubscriptionRegistry().all()}
         commands = set(subscriptions["database-commands"].topics)
-        self.assertEqual(commands, set(Topics.commands()))
+        self.assertEqual(commands, {Topics.alarms_commands()})
         self.assertFalse(commands & set(subscriptions["database"].topics))
         self.assertIn(Topics.ingestion_observations(), subscriptions["database"].topics)
 

@@ -1,5 +1,5 @@
-"""Périodes d'analyse partagées par les modules de consultation (historique,
-confort, énergie) : mêmes paramètres ``start``/``end``/``bucket_minutes``,
+"""Périodes d'analyse partagées par les modules de consultation (historique
+et analyses temporelles) : mêmes paramètres ``start``/``end``/``bucket_minutes``,
 même validation, mêmes créneaux."""
 
 from .period import Period

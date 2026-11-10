@@ -10,6 +10,10 @@ describe("routes et vues principales", () => {
     expect(await screen.findByRole("heading", { name: "État environnemental du laboratoire" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("22,4 °C")).toBeInTheDocument());
     expect(screen.getByText("Espaces suivis").nextSibling).toHaveTextContent("2");
+    expect(screen.queryByText("Confort thermique")).not.toBeInTheDocument();
+    expect(screen.queryByText("Énergie estimée (24 h)")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Confort" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Énergie" })).not.toBeInTheDocument();
     expect(document.title).toBe("Vue d'ensemble · GRIDD");
   });
 
@@ -34,6 +38,17 @@ describe("routes et vues principales", () => {
   it("affiche une page 404 pour une adresse inconnue", async () => {
     dashboardApi();
     renderApp("/inexistant");
+    expect(await screen.findByRole("heading", { name: "Page introuvable" })).toBeInTheDocument();
+  });
+
+  it("affiche une page 404 pour les anciennes routes confort et énergie", async () => {
+    dashboardApi();
+    const comfortRoute = renderApp("/comfort");
+    expect(await screen.findByRole("heading", { name: "Page introuvable" })).toBeInTheDocument();
+    comfortRoute.unmount();
+
+    dashboardApi();
+    renderApp("/energy");
     expect(await screen.findByRole("heading", { name: "Page introuvable" })).toBeInTheDocument();
   });
 
@@ -70,7 +85,6 @@ describe("analyse historique et période d'observation", () => {
     const before = requests.length;
 
     await user.selectOptions(screen.getByLabelText("Période"), "7d");
-    await user.click(screen.getByRole("button", { name: /Appliquer/ }));
 
     await waitFor(() => expect(router.state.location.search).toContain("period=7d"));
     await waitFor(() => {
