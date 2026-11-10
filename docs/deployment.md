@@ -3,10 +3,10 @@
 Le frontend et l'API ont chacun leur `Dockerfile` et leur `docker-compose.yml`.
 Ils se construisent, se déploient et se mettent à jour indépendamment.
 
-## Frontend (`web/`)
+## Frontend (`apps/web/`)
 
 ```bash
-cd web
+cd apps/web
 cp .env.example .env
 # GRIDD_API_URL=https://api.gridd.example.org
 docker compose build
@@ -47,20 +47,27 @@ cp .env.example .env
 # ALLOWED_HOSTS=api.gridd.example.org,
 # CORS_ALLOWED_ORIGINS=https://gridd.example.org,
 # CSRF_TRUSTED_ORIGINS=https://api.gridd.example.org, USE_X_FORWARDED_PROTO=true
-docker compose up -d --build                # api, workers, kafka, postgres, redis
-docker compose exec api python manage.py createsuperuser
-docker compose --profile simulator up -d    # capteurs simulés (facultatif)
-docker compose logs -f api workers
+docker compose config --quiet
+docker compose build api
+docker compose up -d api
+# À lancer uniquement après vérification du broker et du groupe configurés :
+docker compose up -d kafka-consumer
+docker compose logs -f api kafka-consumer
 ```
+
+Le fichier `apps/api/docker-compose.yml` déclare uniquement `api` et
+`kafka-consumer`. Il ne démarre pas PostgreSQL, Redis ou Kafka ; ces services
+doivent déjà être accessibles depuis les conteneurs et configurés dans `.env`.
+`docker compose up -d` démarre aussi le consommateur. Celui-ci utilise les
+groupes configurés et valide les offsets après traitement : vérifier
+`EVENT_BUS=kafka`, le broker et les groupes avant de le démarrer sur un
+environnement partagé, avec l'autorisation nécessaire.
 
 | Service | Rôle | Notes |
 |---|---|---|
-| `api` | Daphne (ASGI) : REST, WebSocket, admin | applique les migrations au démarrage (`RUN_MIGRATIONS=true`) ; santé `GET /api/health/` ; publie les commandes d'écriture sur Kafka, donc monte aussi `./secrets` |
-| `workers` | `manage.py run_consumers` | modules `ingestion`, `database`, `alarms`, `realtime` ; monte `./secrets` (certificat du Kafka GRIDD) |
-| `kafka` | Kafka 3.8 (KRaft, un nœud) | bus d'événements ; publié sur 9094 pour le développement hors Docker |
-| `simulator` | `manage.py simulate_gridd` | profil `simulator` ; mesures de démonstration |
-| `postgres` | PostgreSQL 16 | volume `gridd_postgres_data` ; publié sur 5433 |
-| `redis` | Redis 7 | volume `gridd_redis_data` ; publié sur 6379 |
+| `api` | Daphne (ASGI) : REST, WebSocket, admin | santé `GET /api/health/`; monte le certificat capteur; pas de migrations automatiques |
+| `kafka-consumer` | `manage.py run_consumers` | modules `ingestion`, `database`, `alarms`, `realtime`; monte le certificat capteur depuis `apps/api/secrets/` |
+| PostgreSQL, Redis, Kafka | Dépendances externes | aucun de ces services n'est défini dans ce Compose |
 
 L'image API :
 
@@ -68,29 +75,23 @@ L'image API :
 - collecte les fichiers statiques de l'admin à la construction (servis par
   WhiteNoise), avec une clé factice : **aucun secret n'est intégré** ;
 - s'exécute sous l'utilisateur `gridd` (uid 10001) ;
-- n'exécute plus `migrate` à la construction (la base n'existe pas à ce
-  moment-là) : c'est fait au démarrage du service `api` uniquement, pour
-  éviter des migrations concurrentes.
+- n'exécute pas de migration automatiquement : appliquer les migrations
+  explicitement après vérification de la base ciblée.
 
-### Services externes
+### Configuration des services externes
 
-Pour une base, un Redis ou un Kafka gérés, renseigner dans `.env` :
-
-```dotenv
-CONTAINER_DB_HOST=db.example.internal
-CONTAINER_DB_PORT=5432
-CONTAINER_REDIS_URL=redis://cache.example.internal:6379/0
-CONTAINER_KAFKA_BOOTSTRAP_SERVERS=kafka.example.internal:9092
-```
-
-puis `docker compose up -d --no-deps api workers`.
+Renseigner les variables standard de `.env` (`DB_HOST`, `REDIS_URL`,
+`KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_SENSORS_*`) avec des adresses joignables
+depuis les conteneurs. Une adresse `localhost` désigne le conteneur lui-même,
+pas l'hôte Windows ni un service distant.
 
 ### Kafka
 
 - Les capteurs réels se lisent sur le Kafka GRIDD (`KAFKA_SENSORS_*`, certificat
-  dans `./secrets/`) ; les événements internes passent par le bus du Compose
-  ou un Kafka géré (`KAFKA_*`).
-- `workers` crée les topics internes au démarrage (`KAFKA_AUTO_CREATE_TOPICS`).
+  dans `apps/api/secrets/`) ; les événements internes passent par un Kafka
+  géré (`KAFKA_*`).
+- `kafka-consumer` crée les topics internes au démarrage si
+  `KAFKA_AUTO_CREATE_TOPICS` est activé.
   En production, prévoir au moins 3 partitions et un facteur de réplication
   adapté au cluster.
 - Montée en charge : dédier un service par module avec
@@ -99,8 +100,8 @@ puis `docker compose up -d --no-deps api workers`.
   `ingestion` et `alarms` gardent une vue locale de leur état (historique
   récent des capteurs, état des règles) : les laisser à **une instance** chacun,
   ce qui suffit largement pour quelques centaines de capteurs.
-- Le Kafka du Compose conserve les messages tant que le conteneur existe ; ce
-  sont des données en transit, la donnée de référence est dans PostgreSQL.
+- Les données Kafka sont en transit ; la donnée de référence est dans
+  PostgreSQL.
 
 ## Production : points d'attention
 

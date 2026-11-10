@@ -53,13 +53,16 @@ contrôleurs sans accès aux données.
 
 ## Installation locale
 
+PostgreSQL et Redis doivent être démarrés séparément et leurs adresses
+configurées dans `.env`. Le fichier Compose de l'API ne fournit pas ces
+dépendances : il ne déclare que l'API et le consommateur Kafka.
+
 ```bash
 cd apps/api
 python -m venv .venv
 . .venv/bin/activate                    # Windows : .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 cp .env.example .env                    # Windows : Copy-Item .env.example .env
-docker compose up -d postgres redis     # PostgreSQL (5433) et Redis (6379)
 python manage.py migrate
 python manage.py seed_gridd             # zones, capteurs et règles de démonstration
 python manage.py createsuperuser
@@ -74,8 +77,12 @@ arrivent au navigateur par Redis.
 
 ### Avec Kafka (comme en production)
 
+Le fichier Compose ne démarre pas Kafka, PostgreSQL ni Redis. Ces services
+doivent être accessibles séparément. `run_consumers` démarre les groupes
+configurés et valide les offsets après traitement; vérifier `EVENT_BUS=kafka`,
+le broker et les groupes avant de le lancer sur un environnement partagé.
+
 ```bash
-docker compose up -d postgres redis kafka   # Kafka publié sur localhost:9094
 # .env : EVENT_BUS=kafka
 python manage.py runserver                  # terminal 1 : API
 python manage.py run_consumers              # terminal 2 : modules
@@ -137,11 +144,20 @@ lancer le simulateur quand les topics capteurs visent le Kafka GRIDD.
 
 ```bash
 cp .env.example .env          # DJANGO_SECRET_KEY, DB_PASSWORD, CORS_ALLOWED_ORIGINS…
-docker compose up -d --build                  # api + workers + kafka + postgres + redis
-docker compose --profile simulator up -d      # + capteurs simulés
-docker compose logs -f workers
-docker compose down                           # conserve les volumes PostgreSQL et Redis
+docker compose config --quiet
+docker compose build api
+docker compose up -d api
+# Démarrer le consommateur seulement après vérification des groupes Kafka.
+docker compose up -d kafka-consumer
+docker compose logs -f api kafka-consumer
+docker compose down
 ```
+
+Le Compose API ne contient ni PostgreSQL, ni Redis, ni broker Kafka. Les
+adresses dans `.env` doivent être joignables depuis les conteneurs. Le
+certificat Kafka, lorsqu'il est requis, doit être placé dans
+`secrets/gridd-kafka-ca.crt`. Les migrations ne sont pas exécutées
+automatiquement par ce Compose.
 
 Voir [`../../docs/deployment.md`](../../docs/deployment.md).
 
