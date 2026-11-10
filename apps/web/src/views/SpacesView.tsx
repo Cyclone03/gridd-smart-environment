@@ -9,7 +9,7 @@ import { useDashboard } from "../stores/dashboardStore";
 import { formatZoneType, zoneDisplayName } from "../utils/format";
 
 export function SpacesView() {
-  const { zones, latest, alerts, comfort, loading } = useDashboard();
+  const { zones, latest, alerts, loading } = useDashboard();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const needle = query.trim().toLocaleLowerCase(LOCALE);
@@ -50,7 +50,6 @@ export function SpacesView() {
                   zone={zone}
                   latest={latest}
                   alertCount={alerts.filter((alert) => alert.zone === zone.id).length}
-                  comfort={comfort.find((item) => item.zone_code === zone.code)?.assessment}
                   onHistory={() => navigate(`${routePath("history")}?zone=${encodeURIComponent(zone.code)}`)}
                 />
               ))}
