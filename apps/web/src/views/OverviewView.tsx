@@ -1,34 +1,15 @@
-import { Activity, Building2, Droplets, Thermometer, ThermometerSun, Users, Volume2, Zap } from "lucide-react";
+import { Activity, Building2, Droplets, Thermometer, Users, Volume2 } from "lucide-react";
 import { SummaryCard } from "../components/common/SummaryCard";
 import { SITE_LABEL } from "../constants/app";
 import { DISPLAY_METRICS, METRIC_VISUALS } from "../constants/metrics";
-import { useAsyncData } from "../composables/useAsyncData";
-import { useRevisionReload } from "../composables/useRevisionReload";
-import { sumEnergy } from "../resources/energy";
-import { getEnergySummary } from "../services/energyService";
 import { useDashboard } from "../stores/dashboardStore";
-import { formatEnergy, formatLongDate, formatPower, formatTime, formatValue } from "../utils/format";
-import { occupancyRate, soundComfortIndex } from "../utils/indicators";
+import { formatLongDate, formatTime, formatValue } from "../utils/format";
+import { occupancyRate } from "../utils/indicators";
 import { averageLatest, readingKey } from "../utils/observations";
 
 /** Vue d'ensemble : synthèse des dernières mesures de tous les espaces. */
 export function OverviewView() {
-  const { zones, latest, lastUpdate, comfort, energyRevision } = useDashboard();
-  // Énergie estimée sur les dernières 24 h, recalculée à chaque rechargement.
-  const energy = useAsyncData(
-    (signal) => getEnergySummary({ start: new Date(Date.now() - 86_400_000), end: new Date() }, signal),
-    [],
-    { keepPrevious: true },
-  );
-  useRevisionReload(energyRevision, energy.reload, 60_000);
-  const visibleCodes = new Set(zones.map((zone) => zone.code));
-  const energyTotal = energy.data
-    ? sumEnergy(energy.data.zones.filter((zone) => visibleCodes.has(zone.zone_code)))
-    : null;
-  const assessed = comfort.filter((zone) => zone.assessment && zone.assessment.level !== "unknown");
-  const comfortable = assessed.filter((zone) => zone.assessment!.level === "comfortable").length;
-  const scores = assessed.map((zone) => zone.assessment!.score).filter((score): score is number => score != null);
-  const comfortScore = scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null;
+  const { zones, latest, lastUpdate } = useDashboard();
   const temperature = averageLatest(zones, latest, "temperature");
   const humidity = averageLatest(zones, latest, "humidity");
   const sound = averageLatest(zones, latest, "sound_level");
@@ -88,35 +69,13 @@ export function OverviewView() {
           tone="red"
         />
         <SummaryCard
-          label="Confort thermique"
-          value={assessed.length ? `${comfortable}/${assessed.length} confortables` : "—"}
-          detail={comfortScore == null ? "aucune évaluation" : `score moyen ${comfortScore}/100`}
-          icon={ThermometerSun}
-          tone="amber"
-        />
-        <SummaryCard
-          label="Énergie estimée (24 h)"
-          value={energyTotal ? formatEnergy(energyTotal.total_kwh) : "—"}
-          detail={
-            energyTotal ? `puissance moyenne ${formatPower(energyTotal.average_power_w)} · estimation` : "estimation"
-          }
-          icon={Zap}
-          tone="green"
-        />
-        <SummaryCard
           label="Taux d'occupation"
           value={occupancy.value == null ? "—" : `${occupancyRate(occupancy.value)} %`}
           detail={coverage(occupancy)}
           icon={Users}
           tone="red"
         />
-        <SummaryCard
-          label="Indice de confort sonore"
-          value={sound.value == null ? "—" : String(soundComfortIndex(sound.value))}
-          detail={`${coverage(sound)} · indicatif`}
-          icon={Volume2}
-          tone="violet"
-        />
+
       </section>
       <section className="availability-card">
         <div>
