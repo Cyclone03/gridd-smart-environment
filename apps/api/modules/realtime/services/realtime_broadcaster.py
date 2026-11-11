@@ -24,15 +24,6 @@ class RealtimeBroadcaster:
     def alerts_changed(self):
         self._send([RealtimeGroups.DASHBOARD], {"type": "alerts.changed"})
 
-    def comfort_updated(self, payload):
-        self._send(
-            [RealtimeGroups.DASHBOARD, RealtimeGroups.zone(payload["zone_code"])],
-            {"type": "comfort.updated", "payload": payload},
-        )
-
-    def energy_updated(self, payload):
-        self._send([RealtimeGroups.DASHBOARD], {"type": "energy.updated", "payload": {"zone_code": payload["zone_code"]}})
-
     @staticmethod
     def _send(groups, event):
         channel_layer = get_channel_layer()

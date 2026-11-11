@@ -1,9 +1,7 @@
 import { isDisplayMetric } from "../../constants/metrics";
-import type { ComfortAssessment } from "../../resources/comfort";
 import type { Zone } from "../../resources/zone";
 import { formatTime, formatZoneType, zoneDisplayName } from "../../utils/format";
 import { observationTime, readingKey, type LatestReadings } from "../../utils/observations";
-import { ComfortBadge } from "../comfort/ComfortBadge";
 import { MetricTile } from "./MetricTile";
 
 /** Carte d'un espace : dernières mesures des capteurs réellement installés. */
@@ -11,13 +9,11 @@ export function ZoneCard({
   zone,
   latest,
   alertCount,
-  comfort,
   onHistory,
 }: {
   zone: Zone;
   latest: LatestReadings;
   alertCount: number;
-  comfort?: ComfortAssessment | null;
   onHistory: () => void;
 }) {
   const metrics = zone.metrics.filter(isDisplayMetric);
@@ -35,14 +31,13 @@ export function ZoneCard({
           <span className="zone-type">{formatZoneType(zone.zone_type)}</span>
           <h3>{zoneDisplayName(zone)}</h3>
         </div>
-        <div className="zone-card-badges">
-          {comfort && comfort.level !== "unknown" && <ComfortBadge level={comfort.level} />}
-          {alertCount > 0 && (
+        {alertCount > 0 && (
+          <div className="zone-card-badges">
             <span className="zone-alert-count">
               {alertCount} alerte{alertCount > 1 ? "s" : ""}
             </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       <div className="zone-metrics">
         {metrics.length ? (

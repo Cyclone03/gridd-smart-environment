@@ -45,14 +45,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: web
+        working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: apps/web/package-lock.json
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -65,9 +65,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Construire l'image du frontend
-        run: docker build -t gridd-web:ci web
+        run: docker build -t gridd-web:ci apps/web
       - name: Construire l'image de l'API
-        run: docker build -t gridd-api:ci apps/api
+        run: docker build -f apps/api/docker/Dockerfile -t gridd-api:ci apps/api
       - name: Démarrer le frontend seul et vérifier /healthz
         run: |
           docker run -d --name web -p 3000:3000 -e GRIDD_API_URL=https://api.example.org gridd-web:ci

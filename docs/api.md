@@ -25,7 +25,7 @@ l'API par le réseau ou un proxy.
 | 400 | Paramètres ou données invalides (`errors` par champ) |
 | 404 | Ressource inconnue |
 | 405 | Méthode non disponible (ex. `PUT` sur une règle) |
-| 503 | `GET /api/health/` : base de données indisponible ; écriture (règle, plages de confort, paramètres énergétiques) : Kafka ou module Database sans réponse |
+| 503 | `GET /api/health/` : base de données indisponible ; écriture d'une règle : Kafka ou module Database sans réponse |
 
 ### CORS et WebSocket
 
@@ -234,110 +234,12 @@ données (`rule: null`, code `DATA_QUALITY_<TYPE>`).
 mesure ayant maintenu l'alerte. Si la règle est supprimée, `rule` devient
 `null` mais `code` (`RULE_<id>`) et `message` restent.
 
-## Confort thermique
+## Fonctionnalités retirées
 
-Méthode et valeurs par défaut : [`comfort-energy.md`](comfort-energy.md).
-
-### `GET /api/comfort/current/`
-
-Chaque zone active, ses plages de confort applicables et sa dernière évaluation
-(`null` tant qu'aucune mesure n'a été évaluée).
-
-```json
-{
-  "zone_code": "meeting-room",
-  "zone_name": "Salle de réunion",
-  "zone_type": "meeting_room",
-  "customized": false,
-  "profile": { "temperature_min": 20, "temperature_max": 24, "temperature_tolerance": 2,
-               "humidity_min": 30, "humidity_max": 60, "humidity_tolerance": 10 },
-  "assessment": { "assessed_at": "…", "temperature": 25.0, "humidity": 45.0,
-                  "temperature_status": "warm", "humidity_status": "ok",
-                  "level": "acceptable", "score": 82.5 }
-}
-```
-
-`level` : `comfortable`, `acceptable`, `uncomfortable`, `unknown`.
-`temperature_status` : `ok`, `cool`, `too_cold`, `warm`, `too_hot`, `unknown` ;
-`humidity_status` : `ok`, `dry`, `too_dry`, `humid`, `too_humid`, `unknown`.
-
-### `GET /api/comfort/zones/<code>/history/`
-
-Paramètres de période identiques à l'historique des mesures (`start`, `end`,
-`bucket_minutes`, ou `hours`, `date`).
-
-```json
-{
-  "zone_code": "meeting-room", "start": "…", "end": "…", "bucket_minutes": 5,
-  "profile": { "…": "…" },
-  "points": [ { "time": "…", "score": 91.2, "temperature": 23.1, "humidity": 44.0,
-                "comfortable": 3, "acceptable": 1, "uncomfortable": 0 } ],
-  "summary": { "count": 72, "average_score": 93.4, "comfortable_ratio": 0.82,
-               "acceptable_ratio": 0.18, "uncomfortable_ratio": 0.0 }
-}
-```
-
-Les compteurs et proportions portent sur le nombre d'évaluations.
-
-### `/api/comfort/profiles/`
-
-| Méthode | Chemin | Effet |
-|---|---|---|
-| `GET` | `/api/comfort/profiles/` | plages de chaque zone (sans évaluation) |
-| `GET` | `/api/comfort/profiles/<code>/` | plages d'une zone |
-| `PATCH` | `/api/comfort/profiles/<code>/` | personnalise (champs absents : valeur actuelle) |
-| `DELETE` | `/api/comfort/profiles/<code>/` | rétablit les valeurs par défaut (réponse 200 avec ces valeurs) |
-
-Validation : température −20 à 60 °C, humidité 0 à 100 %, tolérances
-strictement positives (≤ 20 °C, ≤ 50 %), minimum < maximum.
-
-## Énergie
-
-Estimation par modèle, aucune mesure de consommation :
-[`comfort-energy.md`](comfort-energy.md).
-
-### `GET /api/energy/summary/`
-
-Période : mêmes paramètres que l'historique (défaut : 24 dernières heures).
-Un intervalle est compté dans la période qui contient sa fin.
-
-```json
-{
-  "start": "…", "end": "…",
-  "total": { "lighting_kwh": 7.1, "equipment_kwh": 36.1, "heating_kwh": 2.3, "cooling_kwh": 4.6,
-             "total_kwh": 50.1, "covered_hours": 6.0, "average_power_w": 8341.2 },
-  "zones": [ { "zone_code": "server-equipment-room", "zone_name": "…", "zone_type": "server_room",
-               "customized": false, "total_kwh": 29.3, "…": "…" } ]
-}
-```
-
-`covered_hours` : durée réellement estimée ; `average_power_w` : énergie ÷
-durée estimée (`null` sans estimation).
-
-### `GET /api/energy/zones/<code>/series/`
-
-```json
-{ "zone_code": "…", "start": "…", "end": "…", "bucket_minutes": 15,
-  "points": [ { "time": "…", "lighting_kwh": 0.03, "equipment_kwh": 0.07,
-                "heating_kwh": 0.01, "cooling_kwh": 0.0, "total_kwh": 0.11 } ],
-  "total": { "…": "…" } }
-```
-
-### `/api/energy/profiles/`
-
-Mêmes méthodes que les plages de confort. Champs et bornes :
-
-| Champ | Unité | Bornes |
-|---|---|---|
-| `floor_area_m2` | m² | 0 à 10 000 |
-| `lighting_w_per_m2` | W/m² | 0 à 50 |
-| `equipment_base_w` | W | 0 à 1 000 000 |
-| `equipment_w_per_person` | W | 0 à 5 000 |
-| `default_occupancy` | personnes (entier) | 0 à 500 |
-| `envelope_ua_w_per_k` | W/K | 0 à 100 000 |
-| `ventilation_l_s_per_person` | L/s | 0 à 100 |
-| `outdoor_temperature_c` | °C | −50 à 50 |
-| `heating_cop`, `cooling_cop` | — | 0,5 à 10 |
+Les API de confort thermique (`/api/comfort/`) et d'estimation énergétique
+(`/api/energy/`) ne sont plus routées et répondent 404. Les tables et
+migrations historiques correspondantes sont conservées afin de préserver les
+données déjà enregistrées.
 
 ## Santé
 
@@ -361,9 +263,7 @@ Messages envoyés par le serveur :
 | `{"event": "realtime.connected"}` | à l'ouverture |
 | `{"event": "observation.created", "data": {…}}` | chaque nouvelle observation validée (même forme que `/api/observations/`, plus `zone_code`) |
 | `{"event": "alerts.changed"}` | une alerte a été créée, résolue ou modifiée — recharger `/api/alerts/?active=true` |
-| `{"event": "comfort.updated", "data": {…}}` | nouvelle évaluation de confort (`zone_code` + champs de `assessment`) |
-| `{"event": "energy.updated", "data": {"zone_code": "…"}}` | nouvel intervalle d'énergie estimé — recharger le bilan |
 
 ### `/ws/zones/<code>/`
 
-Observations et évaluations de confort d'une seule zone (`observation.created`, `comfort.updated`).
+Observations d'une seule zone (`observation.created`).

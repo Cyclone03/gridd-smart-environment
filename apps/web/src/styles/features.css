@@ -339,14 +339,12 @@
 }
 
 /* Formulaire de règle */
-.rule-form,
-.profile-form {
+.rule-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-.rule-form fieldset,
-.profile-form fieldset {
+.rule-form fieldset {
   margin: 0;
   padding: 18px 20px 20px;
   border: 1px solid var(--line);
@@ -356,8 +354,7 @@
   flex-direction: column;
   gap: 12px;
 }
-.rule-form legend,
-.profile-form legend {
+.rule-form legend {
   padding: 0 6px;
   color: var(--green);
   font-size: 11px;
@@ -691,219 +688,11 @@
   }
 }
 
-/* ---------------------------------------------------------------------------
-   Confort thermique et énergie
-   --------------------------------------------------------------------------- */
-.summary-grid.four-columns {
-  grid-template-columns: repeat(4, 1fr);
-}
-.comfort-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: fit-content;
-  padding: 4px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 750;
-  white-space: nowrap;
-}
-.comfort-badge i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.comfort-badge b {
-  padding-left: 6px;
-  border-left: 1px solid currentColor;
-  font-weight: 650;
-  opacity: 0.85;
-}
-.comfort-comfortable {
-  color: #0d725f;
-  background: #e3f2ec;
-}
-.comfort-acceptable {
-  color: #93650d;
-  background: #fff3d9;
-}
-.comfort-uncomfortable {
-  color: #a33d34;
-  background: #fce9e7;
-}
-.comfort-unknown {
-  color: #67746f;
-  background: #edf1ef;
-}
+/* Badges shown on each monitored space. */
 .zone-card-badges {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   align-content: flex-start;
   gap: 6px;
-}
-.comfort-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 13px;
-  margin-bottom: 18px;
-}
-.comfort-card {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #fff;
-  text-align: left;
-  cursor: pointer;
-}
-.comfort-card:hover {
-  border-color: #9bbdb4;
-}
-.comfort-card.selected {
-  border-color: var(--green);
-  box-shadow: 0 0 0 3px var(--green-soft);
-}
-.comfort-card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-}
-.comfort-card h3 {
-  margin: 4px 0 0;
-  font-size: 17px;
-  line-height: 1.25;
-}
-.comfort-factors {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
-  margin: 0;
-}
-.comfort-factors > div {
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid #e1e8e6;
-  border-radius: 8px;
-  background: var(--soft);
-}
-.comfort-factors dt {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #697873;
-  font-size: 11px;
-}
-.comfort-factors dd {
-  margin: 2px 0;
-  font-size: 18px;
-  font-weight: 700;
-}
-.comfort-factors small {
-  color: #75817d;
-  font-size: 10px;
-}
-.comfort-card-foot {
-  color: var(--muted);
-  font-size: 11px;
-}
-.detail-panel {
-  margin-top: 4px;
-}
-.settings-card {
-  margin-top: 18px;
-  display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 2fr);
-  gap: 22px;
-  padding-top: 20px;
-  border-top: 1px solid var(--line);
-}
-.settings-card h3 {
-  margin: 4px 0 8px;
-  font-size: 18px;
-}
-.settings-card .muted-note {
-  margin: 0;
-}
-.profile-form .form-actions {
-  align-items: center;
-  flex-wrap: wrap;
-}
-.profile-form .form-actions .badge {
-  margin-right: auto;
-}
-.energy-overview {
-  margin-bottom: 18px;
-}
-.section-bar.flat {
-  min-height: 0;
-  padding: 0 0 14px;
-  border-bottom: 0;
-}
-.table-scroll {
-  margin-top: 16px;
-  overflow-x: auto;
-}
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.data-table th,
-.data-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-  text-align: right;
-  white-space: nowrap;
-}
-.data-table thead th {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 650;
-}
-.data-table th[scope="row"],
-.data-table thead th:first-child {
-  text-align: left;
-}
-.data-table th[scope="row"] button {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font-weight: 700;
-  cursor: pointer;
-}
-.data-table th[scope="row"] small {
-  display: block;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 400;
-}
-.data-table tr.selected {
-  background: var(--green-soft);
-}
-.data-table tr.selected th[scope="row"] button {
-  color: var(--green);
-}
-@media (max-width: 1050px) {
-  .summary-grid.four-columns {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .comfort-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .settings-card {
-    grid-template-columns: 1fr;
-  }
-}
-@media (max-width: 560px) {
-  .summary-grid.four-columns,
-  .comfort-grid {
-    grid-template-columns: 1fr;
-  }
 }

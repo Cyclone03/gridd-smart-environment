@@ -18,6 +18,4 @@ class RealtimeConsumer(EventHandler):
         return {
             EventTypes.OBSERVATION_PERSISTED: lambda event: self._broadcaster.observation_created(event.payload),
             EventTypes.ALERTS_CHANGED: lambda event: self._broadcaster.alerts_changed(),
-            EventTypes.COMFORT_PERSISTED: lambda event: self._broadcaster.comfort_updated(event.payload),
-            EventTypes.ENERGY_PERSISTED: lambda event: self._broadcaster.energy_updated(event.payload),
         }

@@ -3,10 +3,9 @@
 Backend Django de GRIDD, organisé en **modules autonomes qui ne communiquent
 que par Kafka**. Les mesures des capteurs sont validées et qualifiées
 (`ingestion`), enregistrées par le seul module autorisé à écrire en base
-(`database`), puis exploitées par trois services : alarmes (`alarms`),
-confort thermique (`comfort`) et estimation énergétique (`energy`). Tout est
+(`database`), puis exploitées par le moteur d'alarmes (`alarms`). Tout est
 diffusé en temps réel (`realtime`). L'API REST et les WebSocket servent le frontend
-séparé [`web/`](../../web/README.md).
+séparé [`apps/web/`](../web/README.md).
 
 Architecture détaillée : [`docs/architecture.md`](../../docs/architecture.md).
 Topics et événements : [`docs/events.md`](../../docs/events.md).
@@ -16,7 +15,7 @@ Topics et événements : [`docs/events.md`](../../docs/events.md).
 | Processus | Commande | Rôle |
 |---|---|---|
 | Serveur ASGI | `daphne config.asgi:application` (ou `manage.py runserver`) | API REST, WebSocket, admin |
-| Consommateurs | `manage.py run_consumers [--module …]` | Modules `ingestion`, `database`, `alarms`, `comfort`, `energy`, `realtime` (avec `EVENT_BUS=kafka`) |
+| Consommateurs | `manage.py run_consumers [--module …]` | Modules `ingestion`, `database`, `alarms`, `realtime` (avec `EVENT_BUS=kafka`) |
 | Simulateur | `manage.py simulate_gridd --interval 30` | Mesures de démonstration sur les topics capteurs |
 | Kafka | — | Bus d'événements entre modules |
 | PostgreSQL | — | Stockage (écrit uniquement par `database`) |
@@ -38,8 +37,6 @@ modules/
 ├── database/           models/, migrations/, admin/, writers/, services/, consumers/, producers/
 ├── ingestion/          parsers/, domain/ (validation, qualité), repositories/, stores/, services/, consumers/, producers/
 ├── alarms/             controllers/, serializers/, services/, domain/ (moteur), repositories/, stores/, consumers/, producers/
-├── comfort/            confort thermique : domain/ (plages, évaluation), services/, consumers/, producers/, API
-├── energy/             énergie estimée : domain/ (modèle, agrégation), services/, consumers/, producers/, API
 ├── observations/       zones, capteurs, mesures (lecture)
 ├── history/            historique agrégé (lecture)
 ├── realtime/           WebSocket et diffusion
@@ -56,13 +53,16 @@ contrôleurs sans accès aux données.
 
 ## Installation locale
 
+PostgreSQL et Redis doivent être démarrés séparément et leurs adresses
+configurées dans `.env`. Le fichier Compose de l'API ne fournit pas ces
+dépendances : il ne déclare que l'API et le consommateur Kafka.
+
 ```bash
 cd apps/api
 python -m venv .venv
 . .venv/bin/activate                    # Windows : .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 cp .env.example .env                    # Windows : Copy-Item .env.example .env
-docker compose up -d postgres redis     # PostgreSQL (5433) et Redis (6379)
 python manage.py migrate
 python manage.py seed_gridd             # zones, capteurs et règles de démonstration
 python manage.py createsuperuser
@@ -77,8 +77,12 @@ arrivent au navigateur par Redis.
 
 ### Avec Kafka (comme en production)
 
+Le fichier Compose ne démarre pas Kafka, PostgreSQL ni Redis. Ces services
+doivent être accessibles séparément. `run_consumers` démarre les groupes
+configurés et valide les offsets après traitement; vérifier `EVENT_BUS=kafka`,
+le broker et les groupes avant de le lancer sur un environnement partagé.
+
 ```bash
-docker compose up -d postgres redis kafka   # Kafka publié sur localhost:9094
 # .env : EVENT_BUS=kafka
 python manage.py runserver                  # terminal 1 : API
 python manage.py run_consumers              # terminal 2 : modules
@@ -103,13 +107,11 @@ Voir `.env.example` (commenté). Les principales :
 | `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_SECURITY_PROTOCOL`, `KAFKA_USERNAME`… | `localhost:9092`, `PLAINTEXT` | Bus interne |
 | `KAFKA_SENSORS_*` | = bus interne | Cluster des topics capteurs (Kafka GRIDD) |
 | `KAFKA_TOPIC_*` | voir `docs/events.md` | Noms des topics |
-| `DATABASE_SUBSCRIBED_TOPICS` | sorties des modules métier | Topics persistés par `database` |
+| `DATABASE_SUBSCRIBED_TOPICS` | topics d'ingestion et d'alarmes | Topics persistés par `database` |
 | `KAFKA_CONSUMER_GROUP_PREFIX` | `gridd-backend` | Consumer group : `<préfixe>.<module>` |
-| `KAFKA_COMMAND_TIMEOUT_SECONDS` | `10` | Attente d'une réponse (règles, plages de confort, paramètres énergétiques) ; au-delà : 503 |
+| `KAFKA_COMMAND_TIMEOUT_SECONDS` | `10` | Attente d'une réponse aux commandes de règles ; au-delà : 503 |
 | `KAFKA_MAX_ATTEMPTS`, `KAFKA_RETRY_DELAY_SECONDS` | `5`, `2` | Nouvelles tentatives sur erreur transitoire |
 | `KAFKA_AUTO_CREATE_TOPICS` | `true` | Création des topics internes au démarrage des consommateurs |
-| `COMFORT_MAX_INPUT_AGE_MINUTES`, `ENERGY_MAX_INPUT_AGE_MINUTES` | `30` | Âge maximal d'une mesure complémentaire |
-| `ENERGY_MAX_INTERVAL_MINUTES` | `15` | Écart maximal entre deux mesures intégrées |
 | `HISTORY_MAX_RANGE_DAYS`, `HISTORY_TARGET_POINTS`, `HISTORY_MAX_POINTS` | `31`, `400`, `3000` | Historique |
 
 ## Accès
@@ -130,7 +132,6 @@ l'image), puis dans `.env` : `KAFKA_SENSORS_BOOTSTRAP_SERVERS=kafka.gridd-dt.ca:
 python manage.py inspect_kafka --seconds 30           # lecture sans traitement
 python manage.py run_consumers                        # tous les modules
 python manage.py run_consumers --module ingestion --replay-backlog
-python manage.py run_consumers --module comfort --module energy
 python manage.py run_consumers --list                 # abonnements de chaque module
 ```
 
@@ -143,11 +144,20 @@ lancer le simulateur quand les topics capteurs visent le Kafka GRIDD.
 
 ```bash
 cp .env.example .env          # DJANGO_SECRET_KEY, DB_PASSWORD, CORS_ALLOWED_ORIGINS…
-docker compose up -d --build                  # api + workers + kafka + postgres + redis
-docker compose --profile simulator up -d      # + capteurs simulés
-docker compose logs -f workers
-docker compose down                           # conserve les volumes PostgreSQL et Redis
+docker compose config --quiet
+docker compose build api
+docker compose up -d api
+# Démarrer le consommateur seulement après vérification des groupes Kafka.
+docker compose up -d kafka-consumer
+docker compose logs -f api kafka-consumer
+docker compose down
 ```
+
+Le Compose API ne contient ni PostgreSQL, ni Redis, ni broker Kafka. Les
+adresses dans `.env` doivent être joignables depuis les conteneurs. Le
+certificat Kafka, lorsqu'il est requis, doit être placé dans
+`secrets/gridd-kafka-ca.crt`. Les migrations ne sont pas exécutées
+automatiquement par ce Compose.
 
 Voir [`../../docs/deployment.md`](../../docs/deployment.md).
 
@@ -157,13 +167,13 @@ Voir [`../../docs/deployment.md`](../../docs/deployment.md).
 python manage.py test
 ```
 
-116 tests, avec le bus mémoire (aucun Kafka requis) : chaîne complète
-capteur → ingestion → database → alarms / comfort / energy → realtime,
-qualité des données, moteur d'alarmes, confort (niveaux, score, plages
-personnalisées, historique), énergie (modèle, intégration, intervalles
-simultanés, bilan, séries, paramètres), API, historique, idempotence du
-module Database, consommateur Kafka, requête-réponse, migrations et règles
-d'architecture.
+La suite utilise le bus mémoire (aucun Kafka requis) et vérifie la chaîne
+capteur → ingestion → database → alarms → realtime, la qualité des données,
+les API, l'historique, l'idempotence du module Database, le consommateur Kafka,
+les migrations et les règles d'architecture. Les tables et migrations
+historiques des évaluations de confort et estimations énergétiques sont
+conservées pour préserver les données existantes; aucun traitement actif ne
+les alimente.
 
 ## Adresses utiles
 

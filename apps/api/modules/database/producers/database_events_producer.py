@@ -17,12 +17,6 @@ class DatabaseEventsProducer:
     def alerts_changed(self, zone_code=None):
         self._publish(EventTypes.ALERTS_CHANGED, {"zone_code": zone_code}, key=zone_code)
 
-    def comfort_persisted(self, payload):
-        self._publish(EventTypes.COMFORT_PERSISTED, payload, key=payload["zone_code"])
-
-    def energy_persisted(self, payload):
-        self._publish(EventTypes.ENERGY_PERSISTED, payload, key=payload["zone_code"])
-
     def alarm_rule_changed(self, *, rule, action, changed_fields):
         self._publish(
             EventTypes.ALARM_RULE_CHANGED,

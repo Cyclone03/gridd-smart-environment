@@ -5,11 +5,11 @@ services:
   api:
     image: ${GRIDD_API_IMAGE:-gridd-api:latest}
     build:
-      context: ./apps/api
+      context: .
       dockerfile: docker/Dockerfile
     restart: unless-stopped
     env_file:
-      - apps/api/.env
+      - .env
     ports:
       - "${API_PORT:-8000}:8000"
     healthcheck:
@@ -23,7 +23,7 @@ services:
       retries: 3
       start_period: 40s
     volumes:
-      - ../files/gridd-kafka-ca.crt:/app/secrets/gridd-kafka-ca.crt:ro
+      - ./secrets/gridd-kafka-ca.crt:/app/secrets/gridd-kafka-ca.crt:ro
 
   kafka-consumer:
     image: ${GRIDD_API_IMAGE:-gridd-api:latest}
@@ -32,9 +32,9 @@ services:
     #   dockerfile: docker/Dockerfile
     restart: unless-stopped
     env_file:
-      - apps/api/.env
+      - .env
     volumes:
-      - ../files/gridd-kafka-ca.crt:/app/secrets/gridd-kafka-ca.crt:ro
+      - ./secrets/gridd-kafka-ca.crt:/app/secrets/gridd-kafka-ca.crt:ro
     command: ["python", "manage.py", "run_consumers"]
     depends_on:
       api:

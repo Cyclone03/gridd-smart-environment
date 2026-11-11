@@ -4,11 +4,7 @@ from .zone import Zone
 
 
 class EnergyProfile(models.Model):
-    """Paramètres personnalisés du modèle d'estimation énergétique d'une zone.
-
-    Sans enregistrement, le module ``energy`` applique les valeurs par défaut
-    du type d'espace.
-    """
+    """Ancien profil conservé pour préserver les données déjà enregistrées."""
 
     zone = models.OneToOneField(Zone, on_delete=models.CASCADE, related_name="energy_profile")
     floor_area_m2 = models.FloatField()

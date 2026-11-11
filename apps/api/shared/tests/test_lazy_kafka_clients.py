@@ -23,8 +23,14 @@ class ReadsDoNotNeedKafkaTests(TestCase):
         self.addCleanup(Messaging.reset)
         AlarmRule.objects.create(name="R", metric="humidity", operator="lt", threshold=20)
 
-    def test_read_endpoints_work_without_kafka_configuration(self):
+    def test_active_read_endpoints_work_without_kafka_configuration(self):
         client = APIClient()
-        for url in ("/api/alarm-rules/", "/api/comfort/profiles/", "/api/energy/profiles/"):
+        for url in ("/api/alarm-rules/",):
             with self.subTest(url=url):
                 self.assertEqual(client.get(url).status_code, 200)
+
+    def test_retired_feature_endpoints_are_not_routed(self):
+        client = APIClient()
+        for url in ("/api/comfort/profiles/", "/api/energy/profiles/"):
+            with self.subTest(url=url):
+                self.assertEqual(client.get(url).status_code, 404)

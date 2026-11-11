@@ -8,8 +8,6 @@ class BroadcastWebSocket(AsyncJsonWebsocketConsumer):
     - ``{"event": "realtime.connected"}`` à l'ouverture ;
     - ``{"event": "observation.created", "data": {...}}`` pour chaque mesure ;
     - ``{"event": "alerts.changed"}`` lorsqu'une alerte est créée ou résolue ;
-    - ``{"event": "comfort.updated", "data": {...}}`` pour chaque évaluation de confort ;
-    - ``{"event": "energy.updated", "data": {"zone_code": ...}}`` après une estimation d'énergie.
     """
 
     group_name = None
@@ -30,9 +28,3 @@ class BroadcastWebSocket(AsyncJsonWebsocketConsumer):
 
     async def alerts_changed(self, event):
         await self.send_json({"event": "alerts.changed"})
-
-    async def comfort_updated(self, event):
-        await self.send_json({"event": "comfort.updated", "data": event["payload"]})
-
-    async def energy_updated(self, event):
-        await self.send_json({"event": "energy.updated", "data": event["payload"]})

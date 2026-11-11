@@ -37,22 +37,6 @@ class Topics:
         return settings.KAFKA_TOPICS["alarms_commands"]
 
     @staticmethod
-    def comfort_events() -> str:
-        return settings.KAFKA_TOPICS["comfort_events"]
-
-    @staticmethod
-    def comfort_commands() -> str:
-        return settings.KAFKA_TOPICS["comfort_commands"]
-
-    @staticmethod
-    def energy_events() -> str:
-        return settings.KAFKA_TOPICS["energy_events"]
-
-    @staticmethod
-    def energy_commands() -> str:
-        return settings.KAFKA_TOPICS["energy_commands"]
-
-    @staticmethod
     def database_events() -> str:
         return settings.KAFKA_TOPICS["database_events"]
 
@@ -68,7 +52,7 @@ class Topics:
     @classmethod
     def commands(cls) -> tuple[str, ...]:
         """Topics de commandes (requête-réponse avec l'API)."""
-        return (cls.alarms_commands(), cls.comfort_commands(), cls.energy_commands())
+        return (cls.alarms_commands(),)
 
     @staticmethod
     def internal() -> tuple[str, ...]:

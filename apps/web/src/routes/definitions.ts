@@ -6,8 +6,6 @@
 export type RouteName =
   | "overview"
   | "spaces"
-  | "comfort"
-  | "energy"
   | "history"
   | "alerts"
   | "alarmRules"
@@ -31,8 +29,6 @@ export interface RouteDefinition {
 export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   { name: "overview", path: "/", meta: { title: "Vue d'ensemble", navLabel: "Vue d’ensemble" } },
   { name: "spaces", path: "/spaces", meta: { title: "Espaces", navLabel: "Espaces" } },
-  { name: "comfort", path: "/comfort", meta: { title: "Confort thermique", navLabel: "Confort" } },
-  { name: "energy", path: "/energy", meta: { title: "Consommation énergétique", navLabel: "Énergie" } },
   { name: "history", path: "/history", meta: { title: "Analyse historique", navLabel: "Historique" } },
   { name: "alerts", path: "/alerts", meta: { title: "Alertes", navLabel: "Alertes" } },
   { name: "alarmRules", path: "/alarms/rules", meta: { title: "Règles d'alarme", navLabel: "Règles d’alarme" } },

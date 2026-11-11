@@ -19,31 +19,34 @@ describe("PeriodSelector", () => {
     expect(screen.getByText(/actualisation automatique/)).toBeInTheDocument();
   });
 
-  it("applique une période prédéfinie avec le bouton", async () => {
+  it("applique immédiatement une période prédéfinie", async () => {
     const { onApply, user } = setup();
     await user.selectOptions(screen.getByLabelText("Période"), "7d");
-    expect(screen.getByText("Modification non appliquée")).toBeInTheDocument();
-    expect(onApply).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: /Appliquer/ }));
     expect(onApply).toHaveBeenCalledWith({ kind: "preset", preset: "7d" });
   });
 
-  it("valide puis applique une plage personnalisée", async () => {
+  it("valide une plage personnalisée et l'applique quand elle devient valide", async () => {
     const { onApply, user } = setup();
     await user.selectOptions(screen.getByLabelText("Période"), "custom");
-    fireEvent.change(screen.getByLabelText("Début"), { target: { value: "2026-10-21T10:00" } });
-    fireEvent.change(screen.getByLabelText("Fin"), { target: { value: "2026-10-20T10:00" } });
-    await user.click(screen.getByRole("button", { name: /Appliquer/ }));
+    const toLocalInput = (date: Date) =>
+      new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+    const start = new Date(Date.now() - 48 * 60 * 60 * 1_000);
+    const end = new Date(Date.now() - 36 * 60 * 60 * 1_000);
+    const startValue = toLocalInput(start);
+    const endValue = toLocalInput(end);
+
+    fireEvent.change(screen.getByLabelText("Fin"), { target: { value: endValue } });
     expect(onApply).not.toHaveBeenCalled();
     expect(screen.getByText("La fin doit être postérieure au début.")).toBeInTheDocument();
     expect(screen.getByLabelText("Fin")).toHaveAttribute("aria-invalid", "true");
 
-    fireEvent.change(screen.getByLabelText("Fin"), { target: { value: "2026-10-22T10:00" } });
-    await user.click(screen.getByRole("button", { name: /Appliquer/ }));
+    fireEvent.change(screen.getByLabelText("Début"), { target: { value: startValue } });
     expect(onApply).toHaveBeenCalledWith({
       kind: "custom",
-      start: new Date("2026-10-21T10:00").toISOString(),
-      end: new Date("2026-10-22T10:00").toISOString(),
+      start: new Date(startValue).toISOString(),
+      end: new Date(endValue).toISOString(),
     });
   });
 

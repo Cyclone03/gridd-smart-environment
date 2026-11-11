@@ -2,7 +2,8 @@
 
 Interface publique du module Database pour les autres modules : ils peuvent
 **lire** ces modèles (via leurs propres repositories), jamais les écrire.
-Toute écriture passe par un événement Kafka traité par ce module.
+Les anciens modèles confort/énergie restent enregistrés pour préserver leur
+schéma et leurs données, mais ne sont plus alimentés par un traitement actif.
 """
 
 from .alarm_rule import AlarmRule

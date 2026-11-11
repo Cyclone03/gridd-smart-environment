@@ -71,8 +71,6 @@ INSTALLED_APPS = [
     "modules.alarms.apps.AlarmsConfig",
     "modules.observations.apps.ObservationsConfig",
     "modules.history.apps.HistoryConfig",
-    "modules.comfort.apps.ComfortConfig",
-    "modules.energy.apps.EnergyConfig",
     "modules.realtime.apps.RealtimeConfig",
     "modules.health.apps.HealthConfig",
     "modules.simulator.apps.SimulatorConfig",
@@ -232,7 +230,7 @@ REST_FRAMEWORK = {
 
 
 # ---------------------------------------------------------------------------
-# Périodes d'analyse (historique, confort, énergie)
+# Périodes d'analyse historique
 # ---------------------------------------------------------------------------
 
 # Étendue maximale d'une requête sur une période (start/end).
@@ -291,10 +289,6 @@ KAFKA_TOPICS = {
     "ingestion_observations": os.getenv("KAFKA_TOPIC_INGESTION_OBSERVATIONS", "gridd.backend.ingestion.observations"),
     "alarms_events": os.getenv("KAFKA_TOPIC_ALARMS_EVENTS", "gridd.backend.alarms.events"),
     "alarms_commands": os.getenv("KAFKA_TOPIC_ALARMS_COMMANDS", "gridd.backend.alarms.commands"),
-    "comfort_events": os.getenv("KAFKA_TOPIC_COMFORT_EVENTS", "gridd.backend.comfort.events"),
-    "comfort_commands": os.getenv("KAFKA_TOPIC_COMFORT_COMMANDS", "gridd.backend.comfort.commands"),
-    "energy_events": os.getenv("KAFKA_TOPIC_ENERGY_EVENTS", "gridd.backend.energy.events"),
-    "energy_commands": os.getenv("KAFKA_TOPIC_ENERGY_COMMANDS", "gridd.backend.energy.commands"),
     "database_events": os.getenv("KAFKA_TOPIC_DATABASE_EVENTS", "gridd.backend.database.events"),
     "database_replies": os.getenv("KAFKA_TOPIC_DATABASE_REPLIES", "gridd.backend.database.replies"),
 }
@@ -304,10 +298,6 @@ DATABASE_SUBSCRIBED_TOPICS = env_list("DATABASE_SUBSCRIBED_TOPICS") or [
     KAFKA_TOPICS["ingestion_observations"],
     KAFKA_TOPICS["alarms_events"],
     KAFKA_TOPICS["alarms_commands"],
-    KAFKA_TOPICS["comfort_events"],
-    KAFKA_TOPICS["comfort_commands"],
-    KAFKA_TOPICS["energy_events"],
-    KAFKA_TOPICS["energy_commands"],
 ]
 
 # Consumer group de chaque module : « <préfixe>.<module> ».
@@ -322,19 +312,6 @@ KAFKA_RETRY_DELAY_SECONDS = env_float("KAFKA_RETRY_DELAY_SECONDS", 2)
 KAFKA_AUTO_CREATE_TOPICS = env_bool("KAFKA_AUTO_CREATE_TOPICS", True)
 KAFKA_TOPIC_PARTITIONS = env_int("KAFKA_TOPIC_PARTITIONS", 3)
 KAFKA_TOPIC_REPLICATION_FACTOR = env_int("KAFKA_TOPIC_REPLICATION_FACTOR", 1)
-
-
-# ---------------------------------------------------------------------------
-# Confort thermique et énergie
-# ---------------------------------------------------------------------------
-
-# Âge maximal d'une mesure utilisée en complément (ex. humidité lors d'une
-# nouvelle température) : au-delà, elle est considérée comme absente.
-COMFORT_MAX_INPUT_AGE_MINUTES = env_int("COMFORT_MAX_INPUT_AGE_MINUTES", 30)
-ENERGY_MAX_INPUT_AGE_MINUTES = env_int("ENERGY_MAX_INPUT_AGE_MINUTES", 30)
-# Écart maximal entre deux mesures intégrées : au-delà (capteur muet), la
-# période n'est pas estimée plutôt que d'extrapoler.
-ENERGY_MAX_INTERVAL_MINUTES = env_int("ENERGY_MAX_INTERVAL_MINUTES", 15)
 
 
 # ---------------------------------------------------------------------------

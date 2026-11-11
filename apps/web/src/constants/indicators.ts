@@ -1,9 +1,7 @@
 /**
  * Paramètres des indicateurs de synthèse de la vue d'ensemble.
  *
- * Ce sont des repères internes au GRIDD, pas des normes. Le confort thermique
- * est, lui, évalué par le backend (module comfort) selon les plages de
- * chaque espace.
+ * Ce sont des repères internes au GRIDD, pas des normes.
  */
 
 /** Niveau sonore à partir duquel le confort sonore diminue (dBA). */

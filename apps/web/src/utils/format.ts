@@ -75,20 +75,6 @@ export function alertOrigin(alert: { rule: number | null; rule_name: string | nu
   return alert.code;
 }
 
-/** Énergie : « 850 Wh » sous 1 kWh, « 12,3 kWh » au-delà. */
-export function formatEnergy(kwh: number | null | undefined): string {
-  if (kwh == null) return "—";
-  if (Math.abs(kwh) < 1) return `${new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 }).format(kwh * 1000)} Wh`;
-  return `${new Intl.NumberFormat(LOCALE, { maximumFractionDigits: kwh < 100 ? 1 : 0 }).format(kwh)} kWh`;
-}
-
-/** Puissance : « 450 W » ou « 1,2 kW ». */
-export function formatPower(watts: number | null | undefined): string {
-  if (watts == null) return "—";
-  if (Math.abs(watts) < 1000) return `${new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 }).format(watts)} W`;
-  return `${new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 }).format(watts / 1000)} kW`;
-}
-
 /** Proportion (0–1) en pourcentage arrondi : « 42 % ». */
 export function formatRatio(ratio: number | null | undefined): string {
   if (ratio == null) return "—";
