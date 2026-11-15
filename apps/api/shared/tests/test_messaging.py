@@ -380,3 +380,53 @@ class KafkaConsumerRunnerWatchTests(SimpleTestCase):
             runner.watch([("database", self.Worker(600)), ("alarms", self.Worker(999))])
         self.assertEqual(exits, [KafkaConsumerRunner.STALL_EXIT_CODE])
         self.assertIn("database", logs.output[0])
+
+
+class PoisonBatchTests(SimpleTestCase):
+    """Un lot qui échoue toujours ne doit jamais bloquer une partition."""
+
+    def test_failing_batches_shrink_then_the_lone_message_is_abandoned(self):
+        consumer = FakeConsumer()
+        worker = KafkaSubscriptionWorker(
+            Subscription("test", ("t1",), RecordingHandler),
+            consumer,
+            stop_event=threading.Event(),
+            live_edge=False,
+            max_attempts=3,
+            retry_delay=0,
+            publishers=[FakePublisher(fail=True)],
+            batch_size=500,
+            sleep=lambda _: None,
+        )
+        worker._handler = RecordingHandler()
+        with self.assertLogs("shared.messaging.kafka_subscription_worker", level="ERROR") as logs:
+            worker.process_batch([FakeKafkaMessage(offset) for offset in range(100, 400)])
+            self.assertEqual(worker._current_batch_size, 30)
+            worker.process_batch([FakeKafkaMessage(offset) for offset in range(100, 130)])
+            self.assertEqual(worker._current_batch_size, 3)
+            worker.process_batch([FakeKafkaMessage(100)])
+        self.assertEqual(consumer.commits, [100])  # abandonné puis validé : la partition avance
+        self.assertTrue(any("message abandonné" in line for line in logs.output))
+
+
+class BatchHookFailureTests(SimpleTestCase):
+    def test_a_failing_end_of_batch_rewinds_instead_of_crashing(self):
+        class FailingHandler(RecordingHandler):
+            def end_batch(self):
+                raise RuntimeError("base indisponible")
+
+        consumer = FakeConsumer()
+        worker = KafkaSubscriptionWorker(
+            Subscription("test", ("t1",), FailingHandler),
+            consumer,
+            stop_event=threading.Event(),
+            live_edge=False,
+            max_attempts=3,
+            retry_delay=0,
+            sleep=lambda _: None,
+        )
+        worker._handler = FailingHandler()
+        with self.assertLogs("shared.messaging.kafka_subscription_worker", level="ERROR"):
+            worker.process_batch([FakeKafkaMessage(1), FakeKafkaMessage(2)])
+        self.assertEqual(consumer.commits, [])
+        self.assertEqual(consumer.seeks, [(0, 1)])

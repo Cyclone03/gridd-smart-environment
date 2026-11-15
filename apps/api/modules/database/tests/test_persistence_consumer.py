@@ -122,3 +122,41 @@ class PersistenceConsumerTests(TestCase):
         errors = self.published(EventTypes.COMMAND_FAILED)[1].payload["error"]["errors"]
         self.assertEqual(errors, {"zone": ["Zone inconnue ou inactive."]})
 
+
+
+class BatchPersistenceTests(PersistenceConsumerTests):
+    """Lot Kafka : les observations sont enregistrées ensemble à la fin du lot."""
+
+    def test_batch_is_persisted_once_with_duplicates_ignored(self):
+        events = [self.observation_event(str(uuid.uuid4())) for _ in range(20)]
+        self.consumer.begin_batch()
+        for event in events + events[:5]:  # 5 messages relivrés dans le même lot
+            self.deliver(event)
+        self.assertEqual(Observation.objects.count(), 0)  # rien avant la fin du lot
+        self.consumer.end_batch()
+        self.assertEqual(Observation.objects.count(), 20)
+        self.assertEqual(len(self.published(EventTypes.OBSERVATION_PERSISTED)), 20)
+        self.assertEqual(len(self.published(EventTypes.ZONES_CHANGED)), 1)
+
+        # Lot relu après un échec : aucun doublon, rien de republié.
+        self.consumer.begin_batch()
+        for event in events:
+            self.deliver(event)
+        self.consumer.end_batch()
+        self.assertEqual(Observation.objects.count(), 20)
+        self.assertEqual(len(self.published(EventTypes.OBSERVATION_PERSISTED)), 20)
+
+    def test_known_zones_and_sensors_are_not_read_again(self):
+        consumer = PersistenceConsumer.build(publisher=self.publisher)
+        consumer._observations._cache_references = True
+        warmup = self.observation_event(str(uuid.uuid4()))
+        consumer.handle(InboundMessage(topic=Topics.ingestion_observations(), value=warmup.encode()))
+
+        consumer.begin_batch()
+        for _ in range(100):
+            event = self.observation_event(str(uuid.uuid4()))
+            consumer.handle(InboundMessage(topic=Topics.ingestion_observations(), value=event.encode()))
+        # Transaction + recherche des doublons + insertion groupée, pour 100 mesures.
+        with self.assertNumQueries(4):
+            consumer.end_batch()
+        self.assertEqual(Observation.objects.count(), 101)

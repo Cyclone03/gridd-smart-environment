@@ -326,6 +326,9 @@ KAFKA_RETRY_DELAY_SECONDS = env_float("KAFKA_RETRY_DELAY_SECONDS", 2)
 # Messages traités par lot (un seul aller-retour broker pour confirmer les
 # publications et valider les offsets du lot).
 KAFKA_BATCH_SIZE = env_int("KAFKA_BATCH_SIZE", 500)
+# Messages préchargés par partition : petit pour que les partitions à jour ne
+# restent pas derrière une partition en rattrapage (librdkafka : 100 000).
+KAFKA_PREFETCH_MESSAGES = env_int("KAFKA_PREFETCH_MESSAGES", 1000)
 # Un module dont la boucle n'avance plus depuis ce délai arrête le processus
 # (redémarré par Docker) au lieu de rester bloqué sans rien traiter.
 KAFKA_CONSUMER_STALL_SECONDS = env_float("KAFKA_CONSUMER_STALL_SECONDS", 300)

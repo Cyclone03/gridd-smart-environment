@@ -29,7 +29,10 @@ class KafkaSubscriptionWorker:
     3. les offsets du lot sont validés en un seul appel.
 
     Si l'étape 2 échoue (broker indisponible), rien n'est validé : le lot est
-    relu depuis son début après un délai (les modules sont idempotents).
+    relu depuis son début après un délai (les modules sont idempotents), en
+    lots de plus en plus petits ; un message seul encore en échec après
+    ``max_attempts`` est abandonné (journalisé) pour ne jamais bloquer une
+    partition indéfiniment.
 
     Par message :
     - ``MessageRejected`` : journalisé puis ignoré (il ne deviendra jamais valide) ;
@@ -63,6 +66,9 @@ class KafkaSubscriptionWorker:
         self._retry_delay = retry_delay
         self._publishers = tuple(publishers)
         self._batch_size = max(1, batch_size)
+        # Taille courante : réduite après un échec pour isoler un message fautif.
+        self._current_batch_size = self._batch_size
+        self._batch_failures = 0
         self._sleep = sleep
         self._handler = None
         # Dernier passage dans la boucle (surveillé par KafkaConsumerRunner).
@@ -84,8 +90,8 @@ class KafkaSubscriptionWorker:
                 if first is None:
                     continue
                 batch = [first]
-                if self._batch_size > 1:
-                    batch.extend(self._consumer.consume(num_messages=self._batch_size - 1, timeout=0))
+                if self._current_batch_size > 1:
+                    batch.extend(self._consumer.consume(num_messages=self._current_batch_size - 1, timeout=0))
                 self.process_batch(batch)
         except Exception:
             logger.exception("[%s] arrêt inattendu du consommateur.", name)
@@ -117,13 +123,33 @@ class KafkaSubscriptionWorker:
             self._call_handler_hook("end_batch")
             for publisher in self._publishers:
                 publisher.end_batch()
-        except MessagingUnavailable as exc:
+        except Exception as exc:
+            if not isinstance(exc, MessagingUnavailable):
+                logger.exception("[%s] échec du traitement groupé du lot.", self._subscription.name)
+            if len(valid) == 1 and self._batch_failures + 1 >= self._max_attempts:
+                # Un seul message, toujours en échec : on l'abandonne (comme une
+                # erreur de traitement) pour ne pas bloquer la partition.
+                logger.error(
+                    "[%s] message abandonné : lot en échec après %s tentative(s) (%s@%s[%s]) : %s",
+                    self._subscription.name,
+                    self._batch_failures + 1,
+                    valid[0].topic(),
+                    valid[0].partition(),
+                    valid[0].offset(),
+                    exc,
+                )
+                self._batch_failures = 0
+                self._commit(valid)
+                return
             self._rewind(valid, exc)
             return
         finally:
             for publisher in self._publishers:
                 publisher.discard_batch()
         self._commit(valid)
+        # Succès : retour progressif à la taille normale des lots.
+        self._batch_failures = 0
+        self._current_batch_size = min(self._batch_size, self._current_batch_size * 10)
 
     def _handle(self, message):
         inbound = self._to_inbound(message)
@@ -176,7 +202,7 @@ class KafkaSubscriptionWorker:
             key = (message.topic(), message.partition())
             first[key] = min(first.get(key, message.offset()), message.offset())
         logger.error(
-            "[%s] publications non confirmées (%s) : relecture de %s message(s).",
+            "[%s] lot en échec (%s) : relecture de %s message(s).",
             self._subscription.name,
             error,
             len(messages),
@@ -188,6 +214,10 @@ class KafkaSubscriptionWorker:
                 logger.warning("[%s] retour en arrière impossible sur %s[%s].", self._subscription.name, topic, partition)
         # État local (caches) peut-être en avance sur ce qui a été publié : repartir de la base.
         self._handler = self._subscription.handler_factory()
+        # Lots de plus en plus petits (500 → 50 → 5 → 1) : un message fautif
+        # finit isolé puis abandonné, au lieu de bloquer la partition en boucle.
+        self._batch_failures += 1
+        self._current_batch_size = max(1, min(len(messages), self._current_batch_size) // 10)
         self._sleep(self._retry_delay)
 
     @staticmethod

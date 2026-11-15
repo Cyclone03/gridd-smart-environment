@@ -12,6 +12,7 @@ from modules.database.writers.alert_writer import AlertWriter
 from modules.database.writers.observation_writer import ObservationWriter
 from modules.database.writers.sensor_writer import SensorWriter
 from modules.database.writers.zone_writer import ZoneWriter
+from shared.caching.local_cache import LocalCache
 from shared.contracts.event_types import EventTypes
 from shared.messaging import CommandFailed, EventHandler, Messaging
 
@@ -31,6 +32,9 @@ class PersistenceConsumer(EventHandler):
         self._alerts = alerts
         self._rules = rules
         self._replies = replies
+        # Pendant un lot Kafka, les observations sont enregistrées ensemble à la fin.
+        self._batching = False
+        self._pending = []
 
     @classmethod
     def build(cls, publisher=None):
@@ -44,6 +48,7 @@ class PersistenceConsumer(EventHandler):
                 observation_writer=ObservationWriter(),
                 mapper=ObservationPayloadMapper(),
                 producer=producer,
+                cache_references=LocalCache.for_event_bus().enabled,
             ),
             alerts=AlertPersistenceService(
                 zone_writer=zone_writer,
@@ -57,7 +62,7 @@ class PersistenceConsumer(EventHandler):
 
     def routes(self):
         return {
-            EventTypes.OBSERVATION_VALIDATED: lambda event: self._observations.persist(event.payload),
+            EventTypes.OBSERVATION_VALIDATED: self._observation,
             EventTypes.ALERT_RAISED: lambda event: self._alerts.raise_alert(event.payload),
             EventTypes.ALERT_RESOLVED: lambda event: self._alerts.resolve_alert(event.payload),
             EventTypes.ALARM_STATE_SAVED: lambda event: self._alerts.save_state(event.payload),
@@ -67,6 +72,26 @@ class PersistenceConsumer(EventHandler):
             EventTypes.ALARM_RULE_UPDATE: lambda event: self._command(event, self._rules.update),
             EventTypes.ALARM_RULE_DELETE: lambda event: self._command(event, self._rules.delete),
         }
+
+    def begin_batch(self):
+        self._batching = True
+        self._pending = []
+
+    def end_batch(self):
+        """Enregistre en une fois les observations du lot (insertion groupée).
+
+        Une erreur ici fait échouer le lot : il est relu (sans doublon, grâce à
+        ``event_id``) par lots plus petits, voir ``KafkaSubscriptionWorker``.
+        """
+        self._batching = False
+        pending, self._pending = self._pending, []
+        self._observations.persist_many(pending)
+
+    def _observation(self, event):
+        if self._batching:
+            self._pending.append(event.payload)
+        else:
+            self._observations.persist(event.payload)
 
     def _command(self, event, operation):
         try:

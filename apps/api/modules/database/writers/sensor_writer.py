@@ -30,6 +30,11 @@ class SensorWriter:
         return sensor, created
 
     @classmethod
+    def stable_metadata(cls, metadata):
+        """Métadonnées sans les champs propres à chaque message."""
+        return cls._stable(metadata)
+
+    @classmethod
     def _stable(cls, metadata):
         if not isinstance(metadata, dict):
             return metadata
