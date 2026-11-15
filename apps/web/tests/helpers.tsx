@@ -1,14 +1,17 @@
 /**
- * Outils de test : faux backend (fetch simulé) et rendu de l'application
- * complète sur une route donnée, avec les vrais services et stores.
+ * Outils de test : faux backend (fetch simulé pour l'API REST, WebSocket
+ * simulé pour le temps réel) et rendu de l'application complète sur une
+ * route donnée, avec les vrais services et stores.
  */
 import { render } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { vi } from "vitest";
 import type { AlarmMetadata, AlarmRule } from "../src/resources/alarmRule";
+import type { Alert } from "../src/resources/alert";
 import type { Observation } from "../src/resources/observation";
 import type { Zone } from "../src/resources/zone";
 import type { ZoneHistory } from "../src/resources/history";
+import type { DashboardSnapshot } from "../src/resources/realtime";
 import { routes } from "../src/routes";
 import { DashboardProvider } from "../src/stores/dashboardStore";
 
@@ -69,6 +72,9 @@ export const zones: Zone[] = [
   },
 ];
 
+/** Mesures reçues il y a une minute (donc « à jour »). */
+const RECENT = new Date(Date.now() - 60_000).toISOString();
+
 export const observations: Observation[] = [
   {
     id: 10,
@@ -80,8 +86,8 @@ export const observations: Observation[] = [
     type: "temperature",
     value: 22.4,
     unit: "C",
-    observed_at: "2026-10-27T12:00:00Z",
-    received_at: "2026-10-27T12:00:01Z",
+    observed_at: RECENT,
+    received_at: RECENT,
     quality_status: "normal",
     quality_reason: "",
   },
@@ -95,26 +101,31 @@ export const observations: Observation[] = [
     type: "occupancy",
     value: 6,
     unit: "person",
-    observed_at: "2026-10-27T12:00:00Z",
-    received_at: "2026-10-27T12:00:01Z",
+    observed_at: RECENT,
+    received_at: RECENT,
     quality_status: "normal",
     quality_reason: "",
   },
 ];
 
+/**
+ * Historique de `points` créneaux de 5 min se terminant maintenant (dans la
+ * fenêtre des périodes glissantes, comme ce que renvoie l'API).
+ */
 export function history(points: number, overrides: Partial<ZoneHistory> = {}): ZoneHistory {
+  const first = Math.floor(Date.now() / 300_000) * 300_000 - points * 300_000;
   return {
     zone_code: "meeting-room",
     type: "temperature",
-    start: "2026-10-27T00:00:00-04:00",
-    end: "2026-10-27T12:00:00-04:00",
+    start: new Date(first).toISOString(),
+    end: new Date().toISOString(),
     timezone: "America/Toronto",
     hours: 12,
     date: null,
     bucket_minutes: 5,
     unit: "°C",
     points: Array.from({ length: points }, (_, index) => ({
-      time: new Date(Date.UTC(2026, 9, 27, 4, index * 5)).toISOString(),
+      time: new Date(first + index * 300_000).toISOString(),
       average: 21 + index / 10,
       minimum: 21,
       maximum: 22,
@@ -189,24 +200,114 @@ export function rule(overrides: Partial<AlarmRule> = {}): AlarmRule {
   };
 }
 
-/** Réponses communes du tableau de bord ; `extra` traite les autres requêtes. */
-export function dashboardApi(extra: Handler = () => undefined) {
-  return mockApi((request) => {
+/**
+ * Faux serveur WebSocket `/ws/dashboard/` : envoie l'instantané à chaque
+ * connexion, répond aux actions et permet de pousser des messages.
+ */
+export function mockRealtime(snapshot: Partial<DashboardSnapshot> = {}) {
+  const state: DashboardSnapshot = {
+    zones,
+    latest: observations,
+    alerts: { active: [], history: [], history_days: 7 },
+    ...snapshot,
+  };
+  const sockets: FakeWebSocket[] = [];
+  const received: unknown[] = [];
+
+  class FakeWebSocket {
+    static readonly CONNECTING = 0;
+    static readonly OPEN = 1;
+    static readonly CLOSING = 2;
+    static readonly CLOSED = 3;
+    readyState = FakeWebSocket.CONNECTING;
+    onopen: ((event: Event) => void) | null = null;
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    onclose: ((event: CloseEvent) => void) | null = null;
+    onerror: ((event: Event) => void) | null = null;
+
+    constructor(readonly url: string) {
+      sockets.push(this);
+      setTimeout(() => {
+        if (this.readyState !== FakeWebSocket.CONNECTING) return;
+        this.readyState = FakeWebSocket.OPEN;
+        this.onopen?.(new Event("open"));
+        this.emit({ event: "realtime.connected" });
+        this.emit({ event: "dashboard.snapshot", data: state });
+      }, 0);
+    }
+
+    send(raw: string) {
+      const message = JSON.parse(raw) as { action?: string };
+      received.push(message);
+      if (message.action === "snapshot") this.emit({ event: "dashboard.snapshot", data: state });
+      if (message.action === "ping") this.emit({ event: "pong" });
+    }
+
+    close() {
+      if (this.readyState === FakeWebSocket.CLOSED) return;
+      this.readyState = FakeWebSocket.CLOSED;
+      this.onclose?.(new CloseEvent("close"));
+    }
+
+    emit(message: unknown) {
+      if (this.readyState === FakeWebSocket.OPEN)
+        this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(message) }));
+    }
+  }
+
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  return {
+    sockets,
+    received,
+    state,
+    /** Pousse un message à toutes les connexions ouvertes. */
+    push(message: unknown) {
+      sockets.forEach((socket) => socket.emit(message));
+    },
+  };
+}
+
+export function alert(overrides: Partial<Alert> = {}): Alert {
+  return {
+    id: 1,
+    zone: 1,
+    zone_code: "meeting-room",
+    zone_name: "Salle de réunion",
+    observation: null,
+    rule: 7,
+    rule_name: "Trop chaud",
+    code: "RULE_7",
+    message: "Température trop élevée",
+    severity: "warning",
+    trigger_value: 29,
+    created_at: "2026-10-27T10:00:00Z",
+    resolved_at: null,
+    resolution: "",
+    active: true,
+    ...overrides,
+  };
+}
+
+/**
+ * Faux backend du tableau de bord : WebSocket (zones, mesures, alertes) et
+ * API REST pour le reste (historique, règles). `extra` traite les requêtes HTTP.
+ */
+export function dashboardApi(extra: Handler = () => undefined, snapshot: Partial<DashboardSnapshot> = {}) {
+  const realtime = mockRealtime(snapshot);
+  const api = mockApi((request) => {
     const custom = extra(request);
     if (custom) return custom;
-    if (request.path === "/api/zones/") return { body: zones };
-    if (request.path === "/api/observations/latest/") return { body: observations };
-    if (request.path === "/api/alerts/") return { body: [] };
     if (request.path === "/api/alarm-rules/metadata/") return { body: metadata };
     return undefined;
   });
+  return { ...api, realtime };
 }
 
 /** Rend l'application complète sur `path`. */
 export function renderApp(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const view = render(
-    <DashboardProvider realtime={false}>
+    <DashboardProvider>
       <RouterProvider router={router} />
     </DashboardProvider>,
   );

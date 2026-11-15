@@ -7,12 +7,7 @@
 export type Severity = "info" | "warning" | "critical";
 
 export type AlertResolution =
-  | ""
-  | "returned_to_normal"
-  | "rule_disabled"
-  | "rule_updated"
-  | "rule_deleted"
-  | "migrated";
+  "" | "returned_to_normal" | "rule_disabled" | "rule_updated" | "rule_deleted" | "migrated";
 
 export interface Alert {
   id: number;
@@ -31,14 +26,4 @@ export interface Alert {
   resolved_at: string | null;
   resolution: AlertResolution;
   active: boolean;
-}
-
-export interface AlertFilters {
-  active?: boolean;
-  zone?: string;
-  rule?: number;
-  severity?: Severity;
-  since?: Date;
-  until?: Date;
-  limit?: number;
 }

@@ -7,7 +7,9 @@ class BroadcastWebSocket(AsyncJsonWebsocketConsumer):
     Messages envoyés au client :
     - ``{"event": "realtime.connected"}`` à l'ouverture ;
     - ``{"event": "observation.created", "data": {...}}`` pour chaque mesure ;
-    - ``{"event": "alerts.changed"}`` lorsqu'une alerte est créée ou résolue ;
+    - ``{"event": "alerts.changed", "data": {"active": [...], "history": [...]}}``
+      lorsqu'une alerte est créée, résolue ou modifiée ;
+    - ``{"event": "zones.changed", "data": [...]}`` lorsque la liste des zones change.
     """
 
     group_name = None
@@ -27,4 +29,7 @@ class BroadcastWebSocket(AsyncJsonWebsocketConsumer):
         await self.send_json({"event": "observation.created", "data": event["payload"]})
 
     async def alerts_changed(self, event):
-        await self.send_json({"event": "alerts.changed"})
+        await self.send_json({"event": "alerts.changed", "data": event.get("payload")})
+
+    async def zones_changed(self, event):
+        await self.send_json({"event": "zones.changed", "data": event.get("payload")})

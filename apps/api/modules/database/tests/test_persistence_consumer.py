@@ -52,6 +52,22 @@ class PersistenceConsumerTests(TestCase):
         }
         return Event(type=EventTypes.OBSERVATION_VALIDATED, payload=payload, source="ingestion")
 
+    def test_zones_changed_is_published_only_when_the_zone_list_changes(self):
+        def deliver(node_id, name="Salle"):
+            event = self.observation_event(str(uuid.uuid4()))
+            event.payload["node_id"] = node_id
+            event.payload["zone"]["name"] = name
+            self.deliver(event)
+
+        deliver("n1")  # nouvelle zone et nouveau capteur
+        self.assertEqual(len(self.published(EventTypes.ZONES_CHANGED)), 1)
+        deliver("n1")  # rien de nouveau
+        self.assertEqual(len(self.published(EventTypes.ZONES_CHANGED)), 1)
+        deliver("n2")  # nouveau capteur
+        deliver("n2", name="Salle B")  # zone renommée
+        self.assertEqual(len(self.published(EventTypes.ZONES_CHANGED)), 3)
+        self.assertEqual(self.published(EventTypes.ZONES_CHANGED)[0].payload, {"zone_code": "salle"})
+
     def test_redelivered_observation_is_persisted_once(self):
         event = self.observation_event(str(uuid.uuid4()))
         self.deliver(event)
@@ -105,3 +121,4 @@ class PersistenceConsumerTests(TestCase):
         self.deliver(self.command(EventTypes.ALARM_RULE_UPDATE, {"rule_id": rule.pk, "fields": {"zone": "inconnue"}}))
         errors = self.published(EventTypes.COMMAND_FAILED)[1].payload["error"]["errors"]
         self.assertEqual(errors, {"zone": ["Zone inconnue ou inactive."]})
+

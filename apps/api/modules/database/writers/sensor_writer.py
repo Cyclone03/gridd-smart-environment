@@ -2,9 +2,16 @@ from modules.database.models import Sensor
 
 
 class SensorWriter:
-    """Création des capteurs à leur première mesure et mise à jour de leurs métadonnées."""
+    """Création des capteurs à leur première mesure et mise à jour de leurs métadonnées.
 
-    def upsert(self, *, node_id, metric, unit, zone, metadata) -> Sensor:
+    Les champs horodatés des métadonnées (propres à chaque message) sont
+    ignorés : sans cela, le capteur était réécrit à chaque mesure.
+    """
+
+    VOLATILE_KEYS = frozenset({"observed_at", "observedAt", "timestamp", "received_at", "_kafka"})
+
+    def upsert(self, *, node_id, metric, unit, zone, metadata) -> tuple[Sensor, bool]:
+        """Retourne ``(capteur, created)``."""
         sensor, created = Sensor.objects.get_or_create(
             node_id=node_id,
             sensor_type=metric,
@@ -12,11 +19,18 @@ class SensorWriter:
                 "label": f"{node_id} - {metric}",
                 "zone": zone,
                 "unit": unit,
-                "metadata": metadata,
+                "metadata": self._stable(metadata),
                 "active": True,
             },
         )
-        if not created and sensor.metadata != metadata:
-            sensor.metadata = metadata
+        stable = self._stable(metadata)
+        if not created and self._stable(sensor.metadata) != stable:
+            sensor.metadata = stable
             sensor.save(update_fields=["metadata"])
-        return sensor
+        return sensor, created
+
+    @classmethod
+    def _stable(cls, metadata):
+        if not isinstance(metadata, dict):
+            return metadata
+        return {key: value for key, value in metadata.items() if key not in cls.VOLATILE_KEYS}

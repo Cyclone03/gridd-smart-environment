@@ -4,11 +4,21 @@ from confluent_kafka import OFFSET_END
 from django.test import SimpleTestCase
 
 from shared.contracts.event_types import EventTypes
-from shared.messaging import CommandFailed, CommandTimeout, Event, MessageHandler, MessageRejected, Subscription
+from shared.messaging import (
+    CommandFailed,
+    CommandTimeout,
+    Event,
+    MessageHandler,
+    MessageRejected,
+    MessagingUnavailable,
+    Subscription,
+)
 from shared.messaging.command_gateway import CommandGateway
 from shared.messaging.in_memory_event_bus import InMemoryEventBus
+from shared.messaging.kafka_consumer_runner import KafkaConsumerRunner
+from shared.messaging.kafka_event_publisher import KafkaEventPublisher
 from shared.messaging.kafka_subscription_worker import KafkaSubscriptionWorker
-from shared.messaging.live_edge_assigner import LiveEdgeAssigner
+from shared.messaging.partition_assignment_monitor import PartitionAssignmentMonitor
 from shared.messaging.reply_handler import ReplyHandler
 from shared.messaging.reply_registry import ReplyRegistry
 
@@ -83,8 +93,9 @@ class CommandGatewayTests(SimpleTestCase):
 
 
 class FakeKafkaMessage:
-    def __init__(self, offset):
+    def __init__(self, offset, partition=0):
         self._offset = offset
+        self._partition = partition
 
     def error(self):
         return None
@@ -99,7 +110,7 @@ class FakeKafkaMessage:
         return None
 
     def partition(self):
-        return 0
+        return self._partition
 
     def offset(self):
         return self._offset
@@ -109,23 +120,51 @@ class FakeKafkaMessage:
 
 
 class FakeConsumer:
+    """Enregistre le dernier offset traité de chaque validation (offset validé - 1)."""
+
     def __init__(self):
         self.commits = []
+        self.commit_calls = 0
+        self.seeks = []
 
-    def commit(self, message, asynchronous):
-        self.commits.append(message.offset())
+    def commit(self, offsets, asynchronous):
+        self.commit_calls += 1
+        self.commits.extend(tp.offset - 1 for tp in offsets)
+
+    def seek(self, partition):
+        self.seeks.append((partition.partition, partition.offset))
+
+
+class FakePublisher:
+    """Publisher en lot dont la confirmation peut échouer."""
+
+    def __init__(self, fail=False):
+        self.fail = fail
+        self.calls = []
+
+    def begin_batch(self):
+        self.calls.append("begin")
+
+    def end_batch(self):
+        self.calls.append("end")
+        if self.fail:
+            raise MessagingUnavailable("broker indisponible")
+
+    def discard_batch(self):
+        self.calls.append("discard")
 
 
 class KafkaSubscriptionWorkerTests(SimpleTestCase):
-    def worker(self, handler, max_attempts=3):
+    def worker(self, handler, max_attempts=3, publishers=(), factory=None):
         consumer = FakeConsumer()
         worker = KafkaSubscriptionWorker(
-            Subscription("test", ("t1",), lambda: handler),
+            Subscription("test", ("t1",), factory or (lambda: handler)),
             consumer,
             stop_event=threading.Event(),
             live_edge=False,
             max_attempts=max_attempts,
             retry_delay=0,
+            publishers=publishers,
             sleep=lambda _: None,
         )
         worker._handler = handler
@@ -163,19 +202,181 @@ class KafkaSubscriptionWorkerTests(SimpleTestCase):
         self.assertEqual(consumer.commits, [8])
 
 
-class LiveEdgeAssignerTests(SimpleTestCase):
+    def test_batch_is_confirmed_then_committed_once(self):
+        handler = RecordingHandler()
+        publisher = FakePublisher()
+        worker, consumer = self.worker(handler, publishers=[publisher])
+        worker.process_batch([FakeKafkaMessage(3, 0), FakeKafkaMessage(4, 0), FakeKafkaMessage(9, 1)])
+        self.assertEqual(len(handler.messages), 3)
+        self.assertEqual(publisher.calls, ["begin", "end", "discard"])
+        self.assertEqual(consumer.commit_calls, 1)  # un seul aller-retour pour tout le lot
+        self.assertEqual(sorted(consumer.commits), [4, 9])  # dernier offset de chaque partition
+
+    def test_unconfirmed_publications_rewind_the_batch_without_commit(self):
+        built = []
+
+        def factory():
+            built.append(RecordingHandler())
+            return built[-1]
+
+        worker, consumer = self.worker(None, publishers=[FakePublisher(fail=True)], factory=factory)
+        worker._handler = factory()
+        with self.assertLogs("shared.messaging.kafka_subscription_worker", level="ERROR"):
+            worker.process_batch([FakeKafkaMessage(10, 0), FakeKafkaMessage(11, 0), FakeKafkaMessage(5, 2)])
+        self.assertEqual(consumer.commits, [])
+        self.assertEqual(sorted(consumer.seeks), [(0, 10), (2, 5)])
+        self.assertEqual(len(built), 2)  # caches locaux reconstruits depuis la base
+
+    def test_handler_batch_hooks_wrap_the_batch(self):
+        class BatchingHandler(RecordingHandler):
+            def __init__(self):
+                super().__init__()
+                self.calls = []
+
+            def begin_batch(self):
+                self.calls.append("begin")
+
+            def end_batch(self):
+                self.calls.append(f"end:{len(self.messages)}")
+
+        handler = BatchingHandler()
+        worker, _ = self.worker(handler)
+        worker.process_batch([FakeKafkaMessage(1), FakeKafkaMessage(2)])
+        self.assertEqual(handler.calls, ["begin", "end:2"])
+
+
+class KafkaEventPublisherTests(SimpleTestCase):
+    class Producer:
+        """Accusés de réception rendus uniquement par flush (aller-retour réseau)."""
+
+        def __init__(self, fail=False):
+            self.fail = fail
+            self.pending = []
+            self.flushes = 0
+
+        def produce(self, topic, value=None, key=None, on_delivery=None):
+            self.pending.append(on_delivery)
+
+        def poll(self, timeout=0):
+            return 0
+
+        def flush(self, timeout=None):
+            self.flushes += 1
+            pending, self.pending = self.pending, []
+            for callback in pending:
+                callback("échec" if self.fail else None, None)
+            return 0
+
+    def test_outside_a_batch_each_publication_is_confirmed(self):
+        producer = self.Producer()
+        publisher = KafkaEventPublisher(lambda: producer)
+        publisher.publish_raw("t", b"1")
+        publisher.publish_raw("t", b"2")
+        self.assertEqual(producer.flushes, 2)
+
+    def test_a_batch_is_confirmed_in_a_single_round_trip(self):
+        producer = self.Producer()
+        publisher = KafkaEventPublisher(lambda: producer)
+        publisher.begin_batch()
+        for value in range(50):
+            publisher.publish_raw("t", str(value).encode())
+        self.assertEqual(producer.flushes, 0)
+        publisher.end_batch()
+        self.assertEqual(producer.flushes, 1)
+
+    def test_delivery_failure_is_reported_at_the_end_of_the_batch(self):
+        publisher = KafkaEventPublisher(lambda: self.Producer(fail=True))
+        publisher.begin_batch()
+        publisher.publish_raw("t", b"1")
+        with self.assertRaises(MessagingUnavailable):
+            publisher.end_batch()
+
+
+class PartitionAssignmentMonitorTests(SimpleTestCase):
+    class Partition:
+        def __init__(self, topic, partition, offset=123):
+            self.topic, self.partition, self.offset = topic, partition, offset
+
+    class Consumer:
+        """Consumer minimal : métadonnées d'un topic à 3 partitions."""
+
+        def __init__(self):
+            self.assigned = None
+
+        def assign(self, partitions):
+            self.assigned = partitions
+
+        def list_topics(self, topic, timeout=None):
+            metadata = type("TopicMetadata", (), {"partitions": {0: None, 1: None, 2: None}, "error": None})()
+            return type("ClusterMetadata", (), {"topics": {topic: metadata}})()
+
     def test_live_assignment_ignores_committed_backlog(self):
-        class Partition:
-            offset = 123
-
-        class Consumer:
-            assigned = None
-
-            def assign(self, partitions):
-                self.assigned = partitions
-
-        consumer = Consumer()
-        partitions = [Partition(), Partition()]
-        LiveEdgeAssigner()(consumer, partitions)
+        consumer = self.Consumer()
+        partitions = [self.Partition("capteurs", 0), self.Partition("capteurs", 1)]
+        PartitionAssignmentMonitor("ingestion", ("capteurs",), live_edge=True).on_assign(consumer, partitions)
         self.assertIs(consumer.assigned, partitions)
         self.assertTrue(all(partition.offset == OFFSET_END for partition in partitions))
+
+    def test_regular_assignment_keeps_committed_offsets(self):
+        consumer = self.Consumer()
+        partitions = [self.Partition("obs", 0)]
+        PartitionAssignmentMonitor("database", ("obs",)).on_assign(consumer, partitions)
+        self.assertEqual(partitions[0].offset, 123)
+
+    def test_warns_when_another_member_reads_some_partitions(self):
+        consumer = self.Consumer()
+        monitor = PartitionAssignmentMonitor("database", ("obs",))
+        with self.assertLogs("shared.messaging.partition_assignment_monitor", level="INFO") as logs:
+            monitor.on_assign(consumer, [self.Partition("obs", 0), self.Partition("obs", 2)])
+            monitor.check(consumer)
+            monitor.check(consumer)  # une seule vérification par rééquilibrage
+        warnings = [line for line in logs.output if line.startswith("WARNING")]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("obs [p1]", warnings[0])
+        self.assertIn("partitions attribuées : obs [p0, p2]", logs.output[0])
+
+    def test_no_warning_when_all_partitions_are_assigned(self):
+        consumer = self.Consumer()
+        monitor = PartitionAssignmentMonitor("database", ("obs",))
+        with self.assertLogs("shared.messaging.partition_assignment_monitor", level="INFO") as logs:
+            monitor.on_assign(consumer, [self.Partition("obs", n) for n in range(3)])
+            monitor.check(consumer)
+        self.assertFalse([line for line in logs.output if line.startswith("WARNING")])
+
+
+class KafkaConsumerRunnerWatchTests(SimpleTestCase):
+    class Worker:
+        def __init__(self, last_progress):
+            self.last_progress = last_progress
+
+    def runner(self, now, heartbeat_file=None):
+        exits = []
+        runner = KafkaConsumerRunner(
+            {},
+            group_prefix="g",
+            max_attempts=1,
+            retry_delay=0,
+            stall_seconds=300,
+            heartbeat_file=heartbeat_file,
+            clock=lambda: now,
+            exit=exits.append,
+        )
+        return runner, exits
+
+    def test_heartbeat_while_every_module_progresses(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as folder:
+            beat = Path(folder) / "beat"
+            runner, exits = self.runner(1000, heartbeat_file=beat)
+            runner.watch([("database", self.Worker(990)), ("alarms", self.Worker(999))])
+            self.assertTrue(beat.exists())
+            self.assertEqual(exits, [])
+
+    def test_a_stalled_module_stops_the_process(self):
+        runner, exits = self.runner(1000)
+        with self.assertLogs("shared.messaging.kafka_consumer_runner", level="CRITICAL") as logs:
+            runner.watch([("database", self.Worker(600)), ("alarms", self.Worker(999))])
+        self.assertEqual(exits, [KafkaConsumerRunner.STALL_EXIT_CODE])
+        self.assertIn("database", logs.output[0])

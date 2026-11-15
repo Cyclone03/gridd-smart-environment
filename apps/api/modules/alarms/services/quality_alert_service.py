@@ -1,3 +1,5 @@
+from django.utils.dateparse import parse_datetime
+
 from modules.alarms.domain.alert_codes import AlertCodes
 from modules.database.models import Alert, Observation
 
@@ -31,6 +33,9 @@ class QualityAlertService:
                 self._store.remember(zone_code, code, False)
             return
 
+        moment = parse_datetime(observation.get("observed_at") or observation["received_at"])
+        if not self._store.should_refresh(zone_code, code, status, moment):
+            return  # alerte déjà active et à jour : rien à republier
         self._producer.alert_raised(
             zone_code=zone_code,
             code=code,

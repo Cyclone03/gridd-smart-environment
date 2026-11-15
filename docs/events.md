@@ -103,7 +103,11 @@ Réponses sur `database.replies` :
 |---|---|---|
 | `observation.persisted` | observation enregistrée (`id`, `zone`, `zone_code`, `zone_name`, `sensor`, `sensor_node_id`, `type`, `value`, `unit`, `observed_at`, `received_at`, `quality_status`, `quality_reason`, `metadata`) | `alarms`, `realtime` |
 | `alerts.changed` | `zone_code` (ou `null`) | `realtime` |
+| `zones.changed` | `zone_code` (ou `null`) — zone créée / renommée, capteur créé, modification dans l'admin | `realtime` |
 | `alarm_rule.changed` | `rule_id`, `action` (`created`, `updated`, `deleted`), `changed_fields`, `enabled`, `severity` | `alarms` |
 
 `observation.persisted` est relayé tel quel aux navigateurs
 (`{"event": "observation.created", "data": …}` sur `/ws/dashboard/`).
+Pour `alerts.changed` et `zones.changed`, le module `realtime` lit une seule
+fois la nouvelle liste (alertes actives + historique récent, ou zones) et la
+diffuse avec le message : les navigateurs ne refont aucune requête HTTP.

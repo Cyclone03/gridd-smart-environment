@@ -3,7 +3,11 @@ from django.db import transaction
 
 class ObservationPersistenceService:
     """Enregistre une observation validée (avec sa zone et son capteur) puis
-    publie ``observation.persisted`` pour les modules en aval."""
+    publie ``observation.persisted`` pour les modules en aval.
+
+    Publie aussi ``zones.changed`` lorsqu'une zone ou un capteur apparaît (ou
+    qu'une zone est renommée) : les tableaux de bord reçoivent alors la
+    nouvelle liste des zones et de leurs mesures sans la redemander."""
 
     def __init__(self, *, zone_writer, sensor_writer, observation_writer, mapper, producer):
         self._zone_writer = zone_writer
@@ -15,8 +19,8 @@ class ObservationPersistenceService:
     def persist(self, payload):
         zone_info = payload["zone"]
         with transaction.atomic():
-            zone = self._zone_writer.upsert(zone_info["code"], zone_info.get("name"), zone_info.get("type"))
-            sensor = self._sensor_writer.upsert(
+            zone, zone_changed = self._zone_writer.upsert(zone_info["code"], zone_info.get("name"), zone_info.get("type"))
+            sensor, sensor_created = self._sensor_writer.upsert(
                 node_id=payload["node_id"],
                 metric=payload["metric"],
                 unit=payload["unit"],
@@ -31,6 +35,8 @@ class ObservationPersistenceService:
             )
         # Publication après validation de la transaction : les modules en aval
         # ne reçoivent que des données réellement enregistrées.
+        if zone_changed or sensor_created:
+            self._producer.zones_changed(zone.code)
         if created:
             self._producer.observation_persisted(self._mapper.to_payload(observation))
         return observation

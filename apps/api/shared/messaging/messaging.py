@@ -97,6 +97,11 @@ class Messaging:
             group_prefix=settings.KAFKA_CONSUMER_GROUP_PREFIX,
             max_attempts=settings.KAFKA_MAX_ATTEMPTS,
             retry_delay=settings.KAFKA_RETRY_DELAY_SECONDS,
+            # Mêmes instances que celles utilisées par les modules (une par cluster).
+            publishers=list({id(p): p for p in (self.publisher(name) for name in self.CONNECTIONS)}.values()),
+            batch_size=settings.KAFKA_BATCH_SIZE,
+            stall_seconds=settings.KAFKA_CONSUMER_STALL_SECONDS,
+            heartbeat_file=settings.KAFKA_CONSUMER_HEARTBEAT_FILE,
         )
 
     def topic_provisioner(self) -> TopicProvisioner:

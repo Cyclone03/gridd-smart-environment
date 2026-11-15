@@ -50,7 +50,9 @@ class SensorReadingConsumer(MessageHandler):
                 f"topic={message.topic} node_id={reading.node_id} zone={zone.get('id', 'unknown')} "
                 f"type={reading.metric} value={reading.value} unit={reading.unit} error={exc}"
             ) from exc
-        logger.info(
+        # Une ligne par mesure : niveau DEBUG (en INFO, des dizaines de lignes
+        # par seconde ralentissaient le consommateur et noyaient les journaux).
+        logger.debug(
             "%s | %s | %s | %s %s | quality=%s",
             payload["zone"]["code"],
             payload["node_id"],

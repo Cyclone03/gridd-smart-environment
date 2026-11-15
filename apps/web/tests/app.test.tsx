@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { dashboardApi, history, renderApp, rule } from "./helpers";
+import { alert, dashboardApi, history, observations, renderApp, rule } from "./helpers";
 
 describe("routes et vues principales", () => {
   it("affiche la vue d'ensemble avec les données de l'API", async () => {
@@ -60,7 +60,103 @@ describe("routes et vues principales", () => {
   });
 });
 
+describe("données du tableau de bord par WebSocket", () => {
+  const DASHBOARD_PATHS = ["/api/zones/", "/api/observations/latest/", "/api/alerts/"];
+
+  it("charge zones, mesures et alertes sans aucune requête HTTP", async () => {
+    const { requests } = dashboardApi(undefined, {
+      alerts: { active: [alert()], history: [alert({ id: 2, active: false, resolution: "returned_to_normal" })] },
+    });
+    const user = userEvent.setup();
+    renderApp("/");
+    await waitFor(() => expect(screen.getByText("22,4 °C")).toBeInTheDocument());
+    await user.click(screen.getByRole("link", { name: /Alertes/ }));
+    expect(await screen.findByText("Retour à la normale")).toBeInTheDocument();
+    expect(requests.filter((request) => DASHBOARD_PATHS.includes(request.path))).toEqual([]);
+  });
+
+  it("applique les alertes et les mesures poussées par le serveur", async () => {
+    const { realtime, requests } = dashboardApi();
+    renderApp("/alerts");
+    expect(await screen.findByText("Aucune alerte active")).toBeInTheDocument();
+
+    realtime.push({ event: "alerts.changed", data: { active: [alert()], history: [] } });
+    expect(await screen.findByText("Température trop élevée")).toBeInTheDocument();
+
+    realtime.push({
+      event: "observation.created",
+      data: { ...realtime.state.latest[0], id: 99, value: 24.8, observed_at: new Date().toISOString() },
+    });
+    await userEvent.setup().click(screen.getByRole("link", { name: /Vue d’ensemble|Vue d'ensemble/ }));
+    await waitFor(() => expect(screen.getByText("24,8 °C")).toBeInTheDocument());
+    expect(requests.filter((request) => DASHBOARD_PATHS.includes(request.path))).toEqual([]);
+  });
+
+  it("le bouton Rafraîchir redemande l'instantané par le WebSocket", async () => {
+    const { realtime, requests } = dashboardApi();
+    const user = userEvent.setup();
+    renderApp("/");
+    await screen.findByText("22,4 °C");
+    await user.click(screen.getByRole("button", { name: "Rafraîchir" }));
+    expect(realtime.received).toContainEqual({ action: "snapshot" });
+    expect(requests).toEqual([]);
+  });
+});
+
+describe("espaces sans données récentes", () => {
+  // Capteurs de la salle de réunion muets depuis 5 jours.
+  const old = new Date(Date.now() - 5 * 86_400_000).toISOString();
+  const silentLatest = observations.map((item) =>
+    item.zone_code === "meeting-room" ? { ...item, observed_at: old, received_at: old } : item,
+  );
+
+  it("signale l'espace muet au lieu de présenter ses anciennes valeurs comme actuelles", async () => {
+    dashboardApi(undefined, { latest: silentLatest });
+    renderApp("/spaces");
+    expect(await screen.findByText("Pas de données récentes")).toBeInTheDocument();
+    expect(screen.getByText(/^Aucune mesure depuis/)).toBeInTheDocument();
+  });
+
+  it("exclut les mesures anciennes des moyennes du laboratoire", async () => {
+    dashboardApi(undefined, { latest: silentLatest });
+    renderApp("/");
+    expect(await screen.findAllByText("0/1 espaces à jour")).not.toHaveLength(0);
+    expect(screen.queryByText("22,4 °C")).not.toBeInTheDocument();
+  });
+
+  it("explique un historique vide par l'arrêt des données", async () => {
+    dashboardApi((request) => (request.path.endsWith("/history/") ? { body: history(0) } : undefined), {
+      latest: silentLatest,
+    });
+    renderApp("/history?zone=meeting-room&metric=temperature&period=6h");
+    expect(await screen.findByText(/Dernière mesure reçue le .*n’envoie plus de données/)).toBeInTheDocument();
+    expect(screen.getByText(/aucune donnée depuis/)).toBeInTheDocument();
+  });
+});
+
 describe("analyse historique et période d'observation", () => {
+  it("met à jour la courbe et les statistiques avec les mesures reçues en direct", async () => {
+    const { realtime, requests } = dashboardApi((request) =>
+      request.path.endsWith("/history/")
+        ? { body: history(24, { type: request.query.get("type") as never }) }
+        : undefined,
+    );
+    renderApp("/history?zone=meeting-room&metric=temperature&period=6h");
+    await screen.findByText("Moyennes par créneau de 5 min");
+    const stat = () => screen.getByText("Mesures").nextSibling;
+    expect(stat()).toHaveTextContent("72");
+    const before = requests.length;
+
+    const now = new Date().toISOString();
+    realtime.push({
+      event: "observation.created",
+      data: { ...realtime.state.latest[0], id: 100, value: 30, observed_at: now, received_at: now },
+    });
+    await waitFor(() => expect(stat()).toHaveTextContent("73"));
+    // Aucune nouvelle requête : la mesure vient du WebSocket.
+    expect(requests.length).toBe(before);
+  });
+
   it("charge la période depuis l'URL et la transmet à l'API", async () => {
     const { requests } = dashboardApi((request) =>
       request.path.endsWith("/history/") ? { body: history(24) } : undefined,

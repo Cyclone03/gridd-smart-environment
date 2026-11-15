@@ -1,23 +1,62 @@
 import { openReconnectingSocket } from "../requests/realtimeSocket";
 import type { Observation } from "../resources/observation";
-import { parseRealtimeMessage } from "../resources/realtime";
+import {
+  parseRealtimeMessage,
+  type AlertsState,
+  type DashboardSnapshot,
+  type RealtimeAction,
+} from "../resources/realtime";
+import type { Zone } from "../resources/zone";
 import type { RealtimeStatus } from "../types/common";
 
 export interface DashboardSubscription {
+  /** État complet : à chaque (re)connexion et après `requestSnapshot()`. */
+  onSnapshot: (snapshot: DashboardSnapshot) => void;
   onObservation: (observation: Observation) => void;
-  onAlertsChanged: () => void;
+  onAlerts: (alerts: AlertsState) => void;
+  onZones: (zones: Zone[]) => void;
+  /** Le serveur n'a pas pu lire les données (base indisponible…). */
+  onServerError: (detail: string) => void;
   onStatus: (status: RealtimeStatus) => void;
 }
 
-/** S'abonne au flux temps réel du tableau de bord. Retourne la désinscription. */
-export function subscribeToDashboard(handlers: DashboardSubscription): () => void {
-  return openReconnectingSocket("/ws/dashboard/", {
+export interface DashboardConnection {
+  /** Redemande l'instantané complet ; `false` si la connexion est coupée. */
+  requestSnapshot: () => boolean;
+  close: () => void;
+}
+
+const PING: RealtimeAction = { action: "ping" };
+const SNAPSHOT: RealtimeAction = { action: "snapshot" };
+
+/** S'abonne au flux temps réel du tableau de bord. */
+export function subscribeToDashboard(handlers: DashboardSubscription): DashboardConnection {
+  const socket = openReconnectingSocket("/ws/dashboard/", {
+    keepAlive: PING,
     onStatus: handlers.onStatus,
     onMessage: (raw) => {
       const message = parseRealtimeMessage(raw);
       if (!message) return;
-      if (message.event === "observation.created") handlers.onObservation(message.data);
-      else if (message.event === "alerts.changed") handlers.onAlertsChanged();
+      switch (message.event) {
+        case "dashboard.snapshot":
+          handlers.onSnapshot(message.data);
+          break;
+        case "observation.created":
+          handlers.onObservation(message.data);
+          break;
+        case "alerts.changed":
+          handlers.onAlerts(message.data);
+          break;
+        case "zones.changed":
+          handlers.onZones(message.data);
+          break;
+        case "dashboard.error":
+          handlers.onServerError(message.detail);
+          break;
+        default:
+          break;
+      }
     },
   });
+  return { requestSnapshot: () => socket.send(SNAPSHOT), close: socket.close };
 }

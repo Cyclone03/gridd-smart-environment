@@ -102,6 +102,84 @@ pas l'hôte Windows ni un service distant.
   ce qui suffit largement pour quelques centaines de capteurs.
 - Les données Kafka sont en transit ; la donnée de référence est dans
   PostgreSQL.
+- **Un préfixe de consumer group par déploiement.** Les instances d'un même
+  module se partagent les partitions de leur groupe
+  (`<KAFKA_CONSUMER_GROUP_PREFIX>.<module>`). C'est voulu pour dupliquer
+  `database` *sur la même base* ; mais une autre instance du backend
+  connectée au même Kafka avec le même préfixe (poste de développement,
+  ancienne version, second `docker compose`, autre base) reçoit une partie des
+  partitions **et donc une partie des zones**, sans aucune erreur. Donner un
+  préfixe distinct à chaque déploiement (`gridd-prod`, `gridd-dev-<nom>`…).
+
+### Débit et retard des consommateurs
+
+Symptôme : les écrans affichent des mesures de plus en plus anciennes ;
+`/api/health/` indique `"status": "degraded"` et `data.age_seconds` grandit ;
+`kafka_groups` montre un `retard` qui augmente.
+
+Ce qui détermine le débit :
+
+- **Traitement par lot** (`KAFKA_BATCH_SIZE`, 500) : les publications d'un
+  lot partent sans attente, leurs accusés sont attendus une fois, puis les
+  offsets sont validés en un appel. Avant, chaque message attendait deux
+  allers-retours avec le broker : quelques messages par seconde avec un
+  Kafka distant, moins que le débit des capteurs, d'où un retard croissant.
+- **Moteur d'alarmes** : une règle toujours déclenchée (ex. « température >
+  10 °C ») republiait l'alerte et l'état à chaque mesure. Désormais un état
+  inchangé et une alerte « en cours » ne sont republiés qu'une fois par
+  minute ; déclenchements et retours à la normale restent immédiats.
+- **Surveillance** : le service `kafka-consumer` a un healthcheck
+  (battement de cœur) ; un module bloqué plus de
+  `KAFKA_CONSUMER_STALL_SECONDS` arrête le processus, que Docker redémarre.
+
+Après un arrêt prolongé, l'arriéré est absorbé par lots en quelques minutes.
+
+### Données d’une partie des espaces absentes
+
+Symptôme : certains espaces n'ont plus aucune mesure récente (badge « Pas de
+données récentes ») alors que d'autres continuent, et les capteurs émettent
+toujours.
+
+Les observations validées sont publiées sur
+`gridd.backend.ingestion.observations` avec le **code de zone comme clé** :
+toutes les mesures d'une zone passent par la même partition
+(`crc32(code) % nombre de partitions`). Si une partition n'est plus lue par
+cette instance, toutes ses zones disparaissent ensemble.
+
+1. Identifier qui lit chaque partition et le retard :
+
+   ```bash
+   docker compose exec kafka-consumer python manage.py kafka_groups
+   ```
+
+   Plusieurs membres dans `gridd-backend.database`, ou une partition
+   « lu par » une autre machine (ou `rdkafka` : instance sans identifiant,
+   donc antérieure à cette version) → une autre instance partage le groupe.
+   Au démarrage, chaque module journalise aussi ses partitions
+   (`partitions attribuées : …`) et avertit si certaines sont lues ailleurs.
+
+2. Arrêter l'autre instance, ou lui donner un autre
+   `KAFKA_CONSUMER_GROUP_PREFIX`.
+
+3. Récupérer les mesures manquantes, tant que Kafka les conserve (rétention
+   par défaut : 7 jours). Tous les consommateurs du groupe arrêtés :
+
+   ```bash
+   kafka-consumer-groups.sh --bootstrap-server <broker> \
+     --group gridd-backend.database \
+     --topic gridd.backend.ingestion.observations \
+     --reset-offsets --to-datetime 2026-11-06T08:00:00.000Z --execute
+   ```
+
+   puis redémarrer `kafka-consumer`. L'enregistrement est idempotent
+   (`event_id` = topic + partition + offset) : les messages déjà en base sont
+   ignorés. Les modules en aval reçoivent les mesures rejouées (alarmes
+   évaluées sur des valeurs anciennes, mises à jour temps réel).
+
+   Si la rétention du topic interne est dépassée, rejouer depuis les topics
+   capteurs du Kafka GRIDD : même commande sur le groupe
+   `gridd-backend.ingestion` et ses topics, puis
+   `run_consumers --module ingestion --replay-backlog`.
 
 ## Production : points d'attention
 
@@ -124,7 +202,8 @@ pas l'hôte Windows ni un service distant.
   frontend pour tracer chaque requête.
 - **Diagnostic** : `GET /healthz` (frontend), `GET /api/health/` (API : base de
   données, couche temps réel, bus d'événements). `run_consumers --list` affiche
-  les abonnements de chaque module. `docker compose ps` affiche l'état de
+  les abonnements de chaque module ; `kafka_groups` affiche les membres, les
+  partitions et le retard de chaque consumer group. `docker compose ps` affiche l'état de
   santé de chaque service.
 
 ## Vérifications effectuées

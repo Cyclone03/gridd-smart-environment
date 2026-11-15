@@ -242,6 +242,15 @@ HISTORY_MAX_POINTS = env_int("HISTORY_MAX_POINTS", 3000)
 
 
 # ---------------------------------------------------------------------------
+# Temps réel (/ws/dashboard/)
+# ---------------------------------------------------------------------------
+
+# Historique des alertes résolues poussé avec les alertes actives.
+REALTIME_ALERT_HISTORY_DAYS = env_int("REALTIME_ALERT_HISTORY_DAYS", 7)
+REALTIME_ALERT_HISTORY_LIMIT = env_int("REALTIME_ALERT_HISTORY_LIMIT", 50)
+
+
+# ---------------------------------------------------------------------------
 # Bus d'événements (Kafka)
 # ---------------------------------------------------------------------------
 
@@ -308,6 +317,16 @@ KAFKA_PUBLISH_TIMEOUT_SECONDS = env_float("KAFKA_PUBLISH_TIMEOUT_SECONDS", 10)
 # Erreur transitoire pendant le traitement d'un message : nouvelles tentatives.
 KAFKA_MAX_ATTEMPTS = env_int("KAFKA_MAX_ATTEMPTS", 5)
 KAFKA_RETRY_DELAY_SECONDS = env_float("KAFKA_RETRY_DELAY_SECONDS", 2)
+# Messages traités par lot (un seul aller-retour broker pour confirmer les
+# publications et valider les offsets du lot).
+KAFKA_BATCH_SIZE = env_int("KAFKA_BATCH_SIZE", 500)
+# Un module dont la boucle n'avance plus depuis ce délai arrête le processus
+# (redémarré par Docker) au lieu de rester bloqué sans rien traiter.
+KAFKA_CONSUMER_STALL_SECONDS = env_float("KAFKA_CONSUMER_STALL_SECONDS", 300)
+# Fichier mis à jour tant que tous les modules avancent (healthcheck Docker).
+KAFKA_CONSUMER_HEARTBEAT_FILE = os.environ.get("KAFKA_CONSUMER_HEARTBEAT_FILE", "/tmp/gridd-consumers.heartbeat")
+# /api/health/ : au-delà, « data.stale » et statut « degraded ».
+HEALTH_MAX_DATA_AGE_SECONDS = env_int("HEALTH_MAX_DATA_AGE_SECONDS", 600)
 # Création des topics internes manquants au démarrage de run_consumers.
 KAFKA_AUTO_CREATE_TOPICS = env_bool("KAFKA_AUTO_CREATE_TOPICS", True)
 KAFKA_TOPIC_PARTITIONS = env_int("KAFKA_TOPIC_PARTITIONS", 3)

@@ -1,20 +1,23 @@
 import { Activity, Building2, Droplets, Thermometer, Users, Volume2 } from "lucide-react";
 import { SummaryCard } from "../components/common/SummaryCard";
+import { useNow } from "../composables/useNow";
 import { SITE_LABEL } from "../constants/app";
 import { DISPLAY_METRICS, METRIC_VISUALS } from "../constants/metrics";
 import { useDashboard } from "../stores/dashboardStore";
-import { formatLongDate, formatTime, formatValue } from "../utils/format";
+import { formatLongDate, formatReadingTime, formatValue } from "../utils/format";
 import { occupancyRate, soundComfortIndex } from "../utils/indicators";
-import { averageLatest, readingKey } from "../utils/observations";
+import { averageLatest, isFresh, readingKey } from "../utils/observations";
 
 /** Vue d'ensemble : synthèse des dernières mesures de tous les espaces. */
 export function OverviewView() {
   const { zones, latest, lastUpdate } = useDashboard();
-  const temperature = averageLatest(zones, latest, "temperature");
-  const humidity = averageLatest(zones, latest, "humidity");
-  const sound = averageLatest(zones, latest, "sound_level");
-  const occupancy = averageLatest(zones, latest, "occupancy");
-  const coverage = (stat: { count: number; expected: number }) => `${stat.count}/${stat.expected} espaces avec mesure`;
+  const now = useNow();
+  // Seules les mesures à jour entrent dans les moyennes.
+  const temperature = averageLatest(zones, latest, "temperature", now);
+  const humidity = averageLatest(zones, latest, "humidity", now);
+  const sound = averageLatest(zones, latest, "sound_level", now);
+  const occupancy = averageLatest(zones, latest, "occupancy", now);
+  const coverage = (stat: { count: number; expected: number }) => `${stat.count}/${stat.expected} espaces à jour`;
 
   return (
     <main className="dashboard">
@@ -29,7 +32,7 @@ export function OverviewView() {
         <div className="overview-context">
           <span>{SITE_LABEL}</span>
           <strong>{formatLongDate(new Date())}</strong>
-          <small>Dernière mesure : {formatTime(lastUpdate)}</small>
+          <small>Dernière mesure : {formatReadingTime(lastUpdate, new Date(now))}</small>
         </div>
       </header>
       <section className="summary-grid three-columns" aria-label="Indicateurs">
@@ -85,13 +88,13 @@ export function OverviewView() {
       </section>
       <section className="availability-card">
         <div>
-          <span className="section-kicker">Mesures reçues</span>
+          <span className="section-kicker">Mesures à jour</span>
           <h2>Disponibilité par type de mesure</h2>
         </div>
         <div className="availability-grid">
           {DISPLAY_METRICS.map((type) => {
             const equipped = zones.filter((zone) => zone.metrics.includes(type));
-            const count = equipped.filter((zone) => latest.has(readingKey(zone.code, type))).length;
+            const count = equipped.filter((zone) => isFresh(latest.get(readingKey(zone.code, type)), now)).length;
             const Icon = METRIC_VISUALS[type].icon;
             return (
               <div key={type}>

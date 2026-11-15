@@ -111,7 +111,11 @@ ajoute `models/`, `migrations/`, `admin/`, `provisioning/`.
    ses décisions (`alert.raised`, `alert.resolved`, `alarm_state.saved`).
 4. `database` les enregistre et publie `alerts.changed` si la liste des
    alertes actives a changé.
-5. `realtime` relaie les mesures et alertes persistées aux navigateurs.
+5. `realtime` relaie les mesures persistées aux navigateurs et, après
+   `alerts.changed` / `zones.changed`, leur pousse la nouvelle liste
+   d'alertes ou de zones. À la connexion, `/ws/dashboard/` envoie un
+   instantané complet : le tableau de bord ne fait aucun appel HTTP
+   périodique.
 
 ### Requête de lecture (frontend)
 

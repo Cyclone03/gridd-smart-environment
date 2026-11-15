@@ -58,11 +58,15 @@ export const PERIOD_PRESETS: PeriodPreset[] = [
 
 export const DEFAULT_PERIOD: ObservationPeriod = { kind: "preset", preset: "today" };
 
-/** Doit rester aligné sur HISTORY_MAX_RANGE_DAYS côté API. */
-export const MAX_RANGE_DAYS = 365;
+/** Doit rester aligné sur HISTORY_MAX_RANGE_DAYS côté API (31 jours par défaut). */
+export const MAX_RANGE_DAYS = 31;
 
-/** Intervalle d'actualisation des graphiques sur une période glissante. */
-export const LIVE_PERIOD_REFRESH_MS = 60_000;
+/**
+ * Fréquence de recalcul de la fenêtre affichée d'une période glissante
+ * (« dernière heure »…). Purement local : les nouvelles mesures arrivent par
+ * le WebSocket, l'historique n'est pas redemandé à l'API.
+ */
+export const LIVE_WINDOW_TICK_MS = 30_000;
 
 export function findPreset(key: string | null | undefined): PeriodPreset | undefined {
   return PERIOD_PRESETS.find((preset) => preset.key === key);

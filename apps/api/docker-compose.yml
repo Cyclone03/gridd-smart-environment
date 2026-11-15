@@ -36,6 +36,19 @@ services:
     volumes:
       - ../files/gridd-kafka-ca.crt:/app/secrets/gridd-kafka-ca.crt:ro
     command: ["python", "manage.py", "run_consumers"]
+    # Fichier mis à jour toutes les 10 s tant que tous les modules avancent ;
+    # un module bloqué plus de KAFKA_CONSUMER_STALL_SECONDS arrête le processus
+    # (redémarré par « restart: unless-stopped »).
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os, sys, time; f = os.environ.get('KAFKA_CONSUMER_HEARTBEAT_FILE', '/tmp/gridd-consumers.heartbeat'); sys.exit(0 if time.time() - os.path.getmtime(f) < 120 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     depends_on:
       api:
         condition: service_healthy

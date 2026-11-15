@@ -473,6 +473,35 @@ button {
 .metric-missing {
   opacity: 0.57;
 }
+/* Dernière valeur connue mais trop ancienne (capteur muet). */
+.metric-stale strong {
+  color: #87928e;
+}
+.metric-stale time {
+  color: #a5642a;
+  white-space: normal;
+}
+.zone-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.zone-stale-badge {
+  height: fit-content;
+  padding: 5px 8px;
+  color: #8a5a1c;
+  background: #fbf0dc;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.space-selector small.stale {
+  color: #a5642a;
+}
+.current-reading small.stale {
+  color: #a5642a;
+}
 .zone-card-foot {
   margin-top: 16px;
   padding-top: 14px;
