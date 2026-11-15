@@ -2,9 +2,11 @@ from django.contrib import admin
 
 from modules.database.models import ThresholdProfile
 
+from .zones_changed_admin_mixin import ZonesChangedAdminMixin
+
 
 @admin.register(ThresholdProfile)
-class ThresholdProfileAdmin(admin.ModelAdmin):
+class ThresholdProfileAdmin(ZonesChangedAdminMixin, admin.ModelAdmin):
     list_display = (
         "zone",
         "enabled",

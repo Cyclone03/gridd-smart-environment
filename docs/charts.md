@@ -24,9 +24,11 @@ La ligne **Période affichée** indique en permanence la période réellement
 représentée et ses bornes. L'en-tête du graphique précise la granularité
 (« Moyennes par créneau de 5 min »), choisie par l'API selon la durée.
 
-Le bouton ⟳ actualise les données. Les périodes glissantes (« dernière
-heure »…) sont en plus recalculées automatiquement chaque minute ; les
-périodes fixes (« hier », plage personnalisée) ne changent pas.
+Le bouton ⟳ recharge l'historique. Pour une période glissante (« dernière
+heure »…), la courbe, les statistiques et les corrélations sont mises à jour
+en direct avec les mesures reçues par le WebSocket, et les créneaux sortis
+de la fenêtre sont retirés : aucune requête n'est refaite. Les périodes fixes
+(« hier », plage personnalisée passée) ne changent pas.
 
 La période fait partie de l'URL (`?period=24h` ou `?start=…&end=…`, avec
 `zone` et `metric`) : l'adresse peut être partagée ou mise en favori, et un
@@ -70,8 +72,18 @@ PeriodSelector ─ onApply ─► useObservationPeriod (URL ?period / ?start&end
 - Pour 30 jours, la granularité automatique est de 3 h (240 créneaux) ;
   pour 7 jours, 30 min ; pour 24 h, 5 min ; pour 1 h, 1 min.
 - Un changement de période annule la requête précédente (`AbortController`)
-  et ne déclenche qu'un seul chargement.
+  et ne déclenche qu'un seul chargement (une requête par mesure : celle du
+  graphique et celles des corrélations, partagées).
 - `useAsyncData` conserve la dernière courbe pendant une actualisation.
+- Mise à jour en direct (`composables/useLiveHistories.ts`,
+  `utils/history.ts`) : chaque mesure reçue sur `/ws/dashboard/` postérieure
+  à la fin de la requête est ajoutée à son créneau (aligné sur l'heure locale
+  du serveur, comme l'API) et les statistiques sont recalculées comme côté
+  API (tolérances de tendance : `TREND_TOLERANCES`, à aligner sur
+  `MetricCatalog`).
+- Les animations Recharts sont désactivées : relancées à chaque nouvelle
+  donnée, elles laissaient la courbe vide tant que des mesures arrivaient.
+- L'axe horizontal est temporel : un trou dans les mesures reste visible.
 
 ### Ajuster les périodes proposées
 

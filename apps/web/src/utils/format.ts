@@ -18,6 +18,32 @@ export function formatTime(value?: string | Date | null): string {
   );
 }
 
+/**
+ * Moment d'une mesure : l'heure seule si c'est aujourd'hui, sinon la date
+ * et l'heure (« 6 nov., 03 h 05 ») — une mesure ancienne ne doit pas
+ * passer pour une mesure du jour.
+ */
+export function formatReadingTime(value?: string | Date | null, now: Date = new Date()): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (date.toDateString() === now.toDateString()) return formatTime(date);
+  return new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(
+    date,
+  );
+}
+
+/**
+ * Point de départ d'une absence de mesure, sans ambiguïté avec une durée :
+ * « 00 h 55 aujourd’hui » ou « le 6 nov. à 03 h 05 ».
+ */
+export function formatSince(value: string | Date, now: Date = new Date()): string {
+  const date = new Date(value);
+  const time = new Intl.DateTimeFormat(LOCALE, { hour: "2-digit", minute: "2-digit" }).format(date);
+  if (date.toDateString() === now.toDateString()) return `${time} aujourd’hui`;
+  const day = new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short" }).format(date);
+  return `le ${day} à ${time}`;
+}
+
 export function formatLongDate(value: Date): string {
   return new Intl.DateTimeFormat(LOCALE, { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(
     value,

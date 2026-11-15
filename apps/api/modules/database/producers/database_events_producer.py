@@ -17,6 +17,11 @@ class DatabaseEventsProducer:
     def alerts_changed(self, zone_code=None):
         self._publish(EventTypes.ALERTS_CHANGED, {"zone_code": zone_code}, key=zone_code)
 
+    def zones_changed(self, zone_code=None):
+        """Zone ou capteur créé / modifié : la liste des zones (et de leurs
+        mesures disponibles) affichée par les tableaux de bord a changé."""
+        self._publish(EventTypes.ZONES_CHANGED, {"zone_code": zone_code}, key=zone_code)
+
     def alarm_rule_changed(self, *, rule, action, changed_fields):
         self._publish(
             EventTypes.ALARM_RULE_CHANGED,

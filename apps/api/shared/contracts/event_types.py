@@ -22,6 +22,7 @@ class EventTypes:
     # database → modules (topic database.events) : faits persistés
     OBSERVATION_PERSISTED = "observation.persisted"
     ALERTS_CHANGED = "alerts.changed"
+    ZONES_CHANGED = "zones.changed"
     ALARM_RULE_CHANGED = "alarm_rule.changed"
 
     # database → émetteur d'une commande (topic database.replies)

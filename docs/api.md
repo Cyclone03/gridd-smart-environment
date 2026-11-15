@@ -256,13 +256,34 @@ données déjà enregistrées.
 
 ### `/ws/dashboard/`
 
+Source unique des données du tableau de bord (zones, dernières mesures,
+alertes). Le frontend ne les demande pas à l'API REST : il reçoit un
+instantané à chaque (re)connexion puis les changements avec leurs données.
+Les routes REST correspondantes restent disponibles pour d'autres clients.
+
 Messages envoyés par le serveur :
 
 | Message | Quand |
 |---|---|
 | `{"event": "realtime.connected"}` | à l'ouverture |
+| `{"event": "dashboard.snapshot", "data": {"zones": […], "latest": […], "alerts": {"active": […], "history": […], "history_days": 7}}` | juste après l'ouverture, et en réponse à `{"action": "snapshot"}` |
 | `{"event": "observation.created", "data": {…}}` | chaque nouvelle observation validée (même forme que `/api/observations/`, plus `zone_code`) |
-| `{"event": "alerts.changed"}` | une alerte a été créée, résolue ou modifiée — recharger `/api/alerts/?active=true` |
+| `{"event": "alerts.changed", "data": {"active": […], "history": […], "history_days": 7}}` | une alerte a été créée, résolue ou modifiée |
+| `{"event": "zones.changed", "data": […]}` | une zone ou un capteur a été créé ou modifié (ingestion ou admin) |
+| `{"event": "dashboard.error", "detail": "…"}` | l'instantané n'a pas pu être lu (base indisponible) |
+| `{"event": "pong"}` | réponse à `{"action": "ping"}` |
+
+Formes : `zones` comme `GET /api/zones/`, `latest` comme
+`GET /api/observations/latest/`, alertes comme `GET /api/alerts/`.
+`history` contient les alertes résolues des `REALTIME_ALERT_HISTORY_DAYS`
+derniers jours (au plus `REALTIME_ALERT_HISTORY_LIMIT`).
+
+Actions acceptées du client :
+
+| Action | Effet |
+|---|---|
+| `{"action": "snapshot"}` | renvoie `dashboard.snapshot` (bouton « Rafraîchir ») |
+| `{"action": "ping"}` | renvoie `pong` (maintien de la connexion derrière un proxy, toutes les 25 s) |
 
 ### `/ws/zones/<code>/`
 

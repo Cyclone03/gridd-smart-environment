@@ -4,19 +4,27 @@ import { Link } from "react-router";
 import { AlertItem } from "../components/alarms/AlertItem";
 import { EmptyState, ErrorMessage, Loading } from "../components/common/Feedback";
 import { PageHeader } from "../components/common/PageHeader";
-import { ALERT_HISTORY_DAYS, ALERT_HISTORY_LIMIT, RESOLUTION_LABELS, SEVERITY_LABELS } from "../constants/alerts";
+import { RESOLUTION_LABELS, SEVERITY_LABELS } from "../constants/alerts";
 import { METRIC_VISUALS } from "../constants/metrics";
 import { useAsyncData } from "../composables/useAsyncData";
 import { routePath } from "../routes/definitions";
 import { listAlarmRules } from "../services/alarmRulesService";
-import { listAlerts } from "../services/alertsService";
 import { useDashboard } from "../stores/dashboardStore";
-import { daysAgo } from "../utils/dates";
 import { alertOrigin, formatDateTime, zoneDisplayName } from "../utils/format";
 
 /** Alertes actives, règles qui s'appliquent à un espace et historique récent. */
 export function AlertsView() {
-  const { alerts, zones, readAlertIds, markAlertRead, markAllAlertsRead, unreadAlertCount } = useDashboard();
+  const {
+    alerts,
+    alertHistory,
+    alertHistoryDays,
+    loading,
+    zones,
+    readAlertIds,
+    markAlertRead,
+    markAllAlertsRead,
+    unreadAlertCount,
+  } = useDashboard();
   const [openAlert, setOpenAlert] = useState<number | null>(null);
   const [ruleZone, setRuleZone] = useState<string>("");
   const selectedZone = ruleZone || zones[0]?.code || "";
@@ -24,12 +32,8 @@ export function AlertsView() {
   const rules = useAsyncData(selectedZone ? (signal) => listAlarmRules({ zone: selectedZone }, signal) : null, [
     selectedZone,
   ]);
-  // L'historique est rechargé quand la liste des alertes actives change.
-  const events = useAsyncData(
-    (signal) => listAlerts({ active: false, since: daysAgo(ALERT_HISTORY_DAYS), limit: ALERT_HISTORY_LIMIT }, signal),
-    [alerts.map((alert) => alert.id).join(",")],
-    { keepPrevious: true },
-  );
+  // Alertes actives et historique récent arrivent par le WebSocket (store) :
+  // aucune requête HTTP n'est refaite quand une alerte change.
 
   return (
     <main className="dashboard page-view">
@@ -130,15 +134,14 @@ export function AlertsView() {
         <div className="section-title">
           <div>
             <span className="section-kicker">
-              <History size={13} aria-hidden="true" /> {ALERT_HISTORY_DAYS} derniers jours
+              <History size={13} aria-hidden="true" /> {alertHistoryDays} derniers jours
             </span>
             <h2>Historique des déclenchements</h2>
           </div>
         </div>
-        {events.error && <ErrorMessage onRetry={events.reload}>{events.error}</ErrorMessage>}
-        {events.loading && !events.data && <Loading />}
-        {events.data && events.data.length === 0 && <p className="muted-note">Aucune alerte résolue sur la période.</p>}
-        {events.data && events.data.length > 0 && (
+        {loading && <Loading />}
+        {!loading && alertHistory.length === 0 && <p className="muted-note">Aucune alerte résolue sur la période.</p>}
+        {alertHistory.length > 0 && (
           <div className="table-scroll">
             <table className="events-table">
               <thead>
@@ -152,7 +155,7 @@ export function AlertsView() {
                 </tr>
               </thead>
               <tbody>
-                {events.data.map((event) => (
+                {alertHistory.map((event) => (
                   <tr key={event.id}>
                     <td>{formatDateTime(event.created_at)}</td>
                     <td>{event.resolved_at ? formatDateTime(event.resolved_at) : "—"}</td>

@@ -11,6 +11,9 @@ logger = logging.getLogger(__name__)
 class RealtimeBroadcaster:
     """Diffusion vers les navigateurs connectés (Django Channels).
 
+    Les messages portent les données elles-mêmes (observation, alertes,
+    zones) : les navigateurs n'ont aucune requête HTTP à refaire.
+
     Une panne du channel layer (Redis indisponible) est journalisée puis
     ignorée : la donnée est déjà enregistrée et un rejeu Kafka n'apporterait rien.
     """
@@ -21,8 +24,22 @@ class RealtimeBroadcaster:
             {"type": "observation.created", "payload": payload},
         )
 
-    def alerts_changed(self):
-        self._send([RealtimeGroups.DASHBOARD], {"type": "alerts.changed"})
+    def observations_created(self, payloads):
+        """Un seul message par groupe pour un lot de mesures (au lieu d'un par mesure)."""
+        if not payloads:
+            return
+        self._send([RealtimeGroups.DASHBOARD], {"type": "observations.created", "payload": payloads})
+        by_zone = {}
+        for payload in payloads:
+            by_zone.setdefault(payload["zone_code"], []).append(payload)
+        for zone_code, items in by_zone.items():
+            self._send([RealtimeGroups.zone(zone_code)], {"type": "observations.created", "payload": items})
+
+    def alerts_changed(self, payload):
+        self._send([RealtimeGroups.DASHBOARD], {"type": "alerts.changed", "payload": payload})
+
+    def zones_changed(self, payload):
+        self._send([RealtimeGroups.DASHBOARD], {"type": "zones.changed", "payload": payload})
 
     @staticmethod
     def _send(groups, event):

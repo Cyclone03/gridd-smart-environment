@@ -85,6 +85,7 @@ export function NormalizedOverlay({ series, multiDay }: { series: Series[]; mult
                 strokeWidth={2}
                 dot={false}
                 connectNulls
+                isAnimationActive={false}
               />
             ))}
           </LineChart>

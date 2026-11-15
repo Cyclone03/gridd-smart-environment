@@ -81,7 +81,7 @@ export function PairScatter({ pair }: { pair: PairResult }) {
                   String(name),
                 ]}
               />
-              <Scatter data={pair.points} fill={b.color} fillOpacity={0.55} />
+              <Scatter data={pair.points} fill={b.color} fillOpacity={0.55} isAnimationActive={false} />
               {line && (
                 <ReferenceLine
                   segment={line}

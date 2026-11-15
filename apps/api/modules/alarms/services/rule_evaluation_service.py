@@ -14,7 +14,10 @@ class RuleEvaluationService:
     - les mesures invalides n'alimentent pas les règles (elles déclenchent
       déjà une alerte de qualité) ;
     - une mesure plus ancienne que la dernière mesure évaluée est ignorée
-      (messages rejoués ou arrivés en retard).
+      (messages rejoués ou arrivés en retard) ;
+    - avec Kafka, une alerte « en cours » et un état inchangé ne sont
+      republiés qu'une fois par minute : seuls les changements partent
+      immédiatement.
 
     Les décisions sont publiées ; le module Database les enregistre.
     """
@@ -53,13 +56,20 @@ class RuleEvaluationService:
                 observed_at=observed_at,
                 min_duration_seconds=rule.min_duration_seconds,
             )
-            self._publish_alert(transition.event, rule, observation)
+            if transition.event != AlarmStateMachine.ONGOING or self._states.should_refresh_alert(
+                rule.id, zone_code, observed_at
+            ):
+                self._publish_alert(transition.event, rule, observation)
+            if transition.event == AlarmStateMachine.TRIGGERED:
+                self._states.should_refresh_alert(rule.id, zone_code, observed_at, triggered=True)
             if transition.event in (AlarmStateMachine.TRIGGERED, AlarmStateMachine.RESOLVED):
                 events.append((transition.event, rule.id))
 
             new_state = RuleState(transition.status, transition.pending_since, value, observed_at)
             self._states.remember(rule.id, zone_code, new_state)
-            self._producer.state_saved(rule_id=rule.id, zone_code=zone_code, state=new_state)
+            # Un état inchangé n'est republié qu'une fois par minute (voir RefreshThrottle).
+            if self._states.should_save(rule.id, zone_code, new_state):
+                self._producer.state_saved(rule_id=rule.id, zone_code=zone_code, state=new_state)
 
         return events
 

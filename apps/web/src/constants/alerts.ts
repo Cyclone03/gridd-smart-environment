@@ -15,6 +15,9 @@ export const RESOLUTION_LABELS: Record<AlertResolution, string> = {
   migrated: "Remplacée par les règles configurables",
 };
 
-/** Profondeur de l'historique des déclenchements affiché sur la page Alertes. */
+/**
+ * Profondeur par défaut de l'historique des déclenchements (page Alertes).
+ * La valeur effective est envoyée par le serveur avec les alertes
+ * (REALTIME_ALERT_HISTORY_DAYS côté API).
+ */
 export const ALERT_HISTORY_DAYS = 7;
-export const ALERT_HISTORY_LIMIT = 50;

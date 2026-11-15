@@ -1,3 +1,4 @@
+import { STALE_READING_MS } from "../constants/app";
 import { HIDDEN_ZONE_NAMES } from "../constants/zones";
 import type { MetricType, Observation } from "../resources/observation";
 import type { Zone } from "../resources/zone";
@@ -13,25 +14,46 @@ export function observationTime(observation: Observation): string {
   return observation.observed_at || observation.received_at;
 }
 
-/** Garde la mesure la plus récente par zone et par type. */
-export function latestByZone(observations: Observation[], zones: Zone[]): LatestReadings {
+/** Vrai si la mesure date de moins de `STALE_READING_MS`. */
+export function isFresh(observation: Observation | undefined, now: number): observation is Observation {
+  return Boolean(observation) && now - Date.parse(observationTime(observation!)) <= STALE_READING_MS;
+}
+
+/**
+ * Ajoute des mesures à l'index des dernières valeurs en ne gardant que la
+ * plus récente par zone et par type. Retourne l'index d'origine (même
+ * référence) si rien n'a changé, pour éviter un rendu inutile.
+ */
+export function mergeLatest(current: LatestReadings, observations: Observation[], zones: Zone[]): LatestReadings {
   const zoneCodes = new Map(zones.map((zone) => [zone.id, zone.code]));
-  const latest: LatestReadings = new Map();
+  let next: LatestReadings | null = null;
   for (const observation of observations) {
     const code = observation.zone_code || zoneCodes.get(observation.zone);
     if (!code) continue;
     const key = readingKey(code, observation.type);
-    const current = latest.get(key);
-    if (!current || Date.parse(observationTime(observation)) > Date.parse(observationTime(current)))
-      latest.set(key, { ...observation, zone_code: code });
+    const known = (next ?? current).get(key);
+    if (known && Date.parse(observationTime(observation)) <= Date.parse(observationTime(known))) continue;
+    next ??= new Map(current);
+    next.set(key, { ...observation, zone_code: code });
   }
-  return latest;
+  return next ?? current;
 }
 
-/** Moyenne des dernières valeurs d'un type sur les zones qui le mesurent. */
-export function averageLatest(zones: Zone[], latest: LatestReadings, metric: MetricType) {
+/** Garde la mesure la plus récente par zone et par type. */
+export function latestByZone(observations: Observation[], zones: Zone[]): LatestReadings {
+  return mergeLatest(new Map(), observations, zones);
+}
+
+/**
+ * Moyenne des dernières valeurs d'un type sur les zones qui le mesurent.
+ * Avec `now`, seules les mesures à jour sont prises en compte : un capteur
+ * muet depuis des jours ne fausse pas la moyenne du laboratoire.
+ */
+export function averageLatest(zones: Zone[], latest: LatestReadings, metric: MetricType, now?: number) {
   const values = zones
-    .map((zone) => latest.get(readingKey(zone.code, metric))?.value)
+    .map((zone) => latest.get(readingKey(zone.code, metric)))
+    .filter((item) => (now == null ? item != null : isFresh(item, now)))
+    .map((item) => item!.value)
     .filter((value): value is number => value != null);
   return {
     value: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null,

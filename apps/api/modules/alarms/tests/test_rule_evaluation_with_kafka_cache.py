@@ -72,3 +72,36 @@ class RuleEvaluationWithKafkaCacheTests(TestCase):
         service.evaluate(self.observation(60, 3, 3))
         self.assertEqual(len(self.producer.resolved), 1)
         self.assertEqual([state["state"].status for state in self.producer.states], ["active", "active", "normal"])
+
+
+class AlarmPublicationThrottleTests(RuleEvaluationWithKafkaCacheTests):
+    """Règle toujours déclenchée, une mesure toutes les 5 s (cas réel :
+    « température > 10 °C ») : l'alerte et l'état ne sont republiés qu'une
+    fois par minute, les changements restent immédiats."""
+
+    def every_five_seconds(self, service, values):
+        for index, value in enumerate(values):
+            observation = self.observation(value, 0, index + 1)
+            observation["observed_at"] = (self.t0 + timedelta(seconds=5 * index)).isoformat()
+            service.evaluate(observation)
+
+    def test_steady_alarm_is_republished_once_a_minute(self):
+        service = self.service(cache_enabled=True)
+        self.every_five_seconds(service, [80] * 25)  # 2 minutes en alarme
+        # Déclenchement + rafraîchissements à 60 s et 120 s (au lieu de 25 publications).
+        self.assertEqual(len(self.producer.raised), 3)
+        self.assertEqual(len(self.producer.states), 3)
+
+    def test_changes_are_published_immediately(self):
+        service = self.service(cache_enabled=True)
+        self.every_five_seconds(service, [80, 80, 80, 60, 80])
+        self.assertEqual(len(self.producer.resolved), 1)
+        self.assertEqual(
+            [state["state"].status for state in self.producer.states], ["active", "normal", "active"]
+        )
+        self.assertEqual(len(self.producer.raised), 2)  # deux déclenchements, aucun rafraîchissement
+
+    def test_memory_bus_publishes_everything(self):
+        service = self.service(cache_enabled=False)
+        self.every_five_seconds(service, [80] * 5)
+        self.assertEqual(len(self.producer.states), 5)

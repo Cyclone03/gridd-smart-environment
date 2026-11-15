@@ -4,8 +4,10 @@ from modules.database.models import ThresholdProfile, Zone
 class ZoneWriter:
     """Création et mise à jour des zones (et de leur profil de qualité)."""
 
-    def upsert(self, code, name=None, zone_type=None) -> Zone:
-        zone, _ = Zone.objects.get_or_create(
+    def upsert(self, code, name=None, zone_type=None) -> tuple[Zone, bool]:
+        """Retourne ``(zone, changed)`` : ``changed`` est vrai si la zone vient
+        d'être créée ou si son nom / son type ont été modifiés."""
+        zone, created = Zone.objects.get_or_create(
             code=code,
             defaults={"name": name or code, "zone_type": zone_type or Zone.ZoneType.OTHER},
         )
@@ -21,7 +23,7 @@ class ZoneWriter:
 
         # Toute zone possède un profil de qualité, désactivé par défaut.
         ThresholdProfile.objects.get_or_create(zone=zone, defaults={"enabled": False})
-        return zone
+        return zone, created or bool(changed_fields)
 
     def find(self, code) -> Zone | None:
         return Zone.objects.filter(code=code).first()

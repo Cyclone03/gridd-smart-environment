@@ -31,6 +31,20 @@ export const METRIC_UNITS: Record<MetricType, string> = {
   co2: "ppm",
 };
 
+/**
+ * Variation sous laquelle la tendance d'un historique est « stable ».
+ * Doit rester aligné sur `trend_tolerance` (MetricCatalog côté API) : les
+ * statistiques sont recalculées dans le navigateur quand des mesures
+ * arrivent en direct.
+ */
+export const TREND_TOLERANCES: Record<MetricType, number> = {
+  temperature: 0.2,
+  humidity: 1,
+  sound_level: 1,
+  occupancy: 1,
+  co2: 20,
+};
+
 /** Mesures prises en compte par l'analyse de corrélation. */
 export const CORRELATION_METRICS = ["temperature", "humidity", "sound_level"] as const;
 export type CorrelationMetric = (typeof CORRELATION_METRICS)[number];
