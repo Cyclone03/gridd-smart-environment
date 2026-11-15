@@ -6,7 +6,8 @@ class BroadcastWebSocket(AsyncJsonWebsocketConsumer):
 
     Messages envoyés au client :
     - ``{"event": "realtime.connected"}`` à l'ouverture ;
-    - ``{"event": "observation.created", "data": {...}}`` pour chaque mesure ;
+    - ``{"event": "observation.created", "data": {...}}`` pour une mesure, ou
+      ``{"event": "observations.created", "data": [...]}`` pour un lot ;
     - ``{"event": "alerts.changed", "data": {"active": [...], "history": [...]}}``
       lorsqu'une alerte est créée, résolue ou modifiée ;
     - ``{"event": "zones.changed", "data": [...]}`` lorsque la liste des zones change.
@@ -27,6 +28,25 @@ class BroadcastWebSocket(AsyncJsonWebsocketConsumer):
 
     async def observation_created(self, event):
         await self.send_json({"event": "observation.created", "data": event["payload"]})
+
+    async def observations_created(self, event):
+        await self.send_json({"event": "observations.created", "data": event["payload"]})
+
+    async def receive_json(self, content, **kwargs):
+        if isinstance(content, dict) and content.get("action") == "ping":
+            await self.refresh_membership()
+            await self.send_json({"event": "pong"})
+
+    async def refresh_membership(self):
+        """Renouvelle l'inscription au groupe.
+
+        Les inscriptions expirent (``group_expiry``, quelques minutes) : une
+        connexion coupée sans ``disconnect`` (redémarrage de l'API) sort donc
+        d'elle-même du groupe au lieu d'y accumuler des messages pendant 24 h.
+        Le navigateur envoie un ``ping`` toutes les 25 s, ce qui garde les
+        connexions vivantes inscrites.
+        """
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
 
     async def alerts_changed(self, event):
         await self.send_json({"event": "alerts.changed", "data": event.get("payload")})

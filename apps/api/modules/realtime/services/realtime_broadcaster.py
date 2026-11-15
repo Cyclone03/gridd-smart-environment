@@ -24,6 +24,17 @@ class RealtimeBroadcaster:
             {"type": "observation.created", "payload": payload},
         )
 
+    def observations_created(self, payloads):
+        """Un seul message par groupe pour un lot de mesures (au lieu d'un par mesure)."""
+        if not payloads:
+            return
+        self._send([RealtimeGroups.DASHBOARD], {"type": "observations.created", "payload": payloads})
+        by_zone = {}
+        for payload in payloads:
+            by_zone.setdefault(payload["zone_code"], []).append(payload)
+        for zone_code, items in by_zone.items():
+            self._send([RealtimeGroups.zone(zone_code)], {"type": "observations.created", "payload": items})
+
     def alerts_changed(self, payload):
         self._send([RealtimeGroups.DASHBOARD], {"type": "alerts.changed", "payload": payload})
 

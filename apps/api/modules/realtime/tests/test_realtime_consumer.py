@@ -78,3 +78,33 @@ class RealtimeBatchingTests(SimpleTestCase):
         self.assertEqual(broadcaster.calls, [])
         consumer.end_batch()
         self.assertEqual([kind for kind, _ in broadcaster.calls], ["alerts", "zones"])
+
+
+class ObservationBatchingTests(SimpleTestCase):
+    def payload(self, sensor, observed_at, zone="salle", metric="temperature"):
+        return {"id": f"{sensor}-{observed_at}", "zone_code": zone, "sensor": sensor, "type": metric, "observed_at": observed_at}
+
+    def test_backlog_is_reduced_to_the_latest_value_per_sensor(self):
+        from datetime import datetime, timezone as tz
+
+        now = datetime(2026, 11, 14, 20, 0, tzinfo=tz.utc)
+        old = [self.payload(1, f"2026-11-14T10:00:{second:02d}+00:00") for second in range(50)]
+        old += [self.payload(2, "2026-11-14T10:00:00+00:00")]
+        fresh = [self.payload(1, "2026-11-14T19:59:30+00:00"), self.payload(1, "2026-11-14T19:59:35+00:00")]
+        kept = RealtimeConsumer.coalesce(old + fresh, now=now)
+        self.assertEqual(len(kept), 4)  # 1 ancienne par capteur + toutes les récentes
+        self.assertIn("1-2026-11-14T10:00:49+00:00", [item["id"] for item in kept])
+
+    def test_a_batch_gives_one_broadcast(self):
+        class Broadcaster(RecordingBroadcaster):
+            def observations_created(self, payloads):
+                self.calls.append(("batch", len(payloads)))
+
+        broadcaster = Broadcaster()
+        consumer = RealtimeConsumer(broadcaster, StubSnapshots())
+        consumer.begin_batch()
+        for second in range(30):
+            event = Event(type=EventTypes.OBSERVATION_PERSISTED, payload=self.payload(1, f"2026-11-01T10:00:{second:02d}+00:00"))
+            consumer.handle(InboundMessage(topic="t", value=event.encode()))
+        consumer.end_batch()
+        self.assertEqual(broadcaster.calls, [("batch", 1)])

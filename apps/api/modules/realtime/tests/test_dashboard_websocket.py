@@ -86,9 +86,12 @@ class DashboardWebSocketTests(TransactionTestCase):
             alerts = await communicator.receive_json_from()
             await layer.group_send("dashboard", {"type": "zones.changed", "payload": [{"code": "salle"}]})
             zones = await communicator.receive_json_from()
+            await layer.group_send("dashboard", {"type": "observations.created", "payload": [{"id": 1}]})
+            batch = await communicator.receive_json_from()
             await communicator.disconnect()
-            return alerts, zones
+            return alerts, zones, batch
 
-        alerts, zones = async_to_sync(scenario)()
+        alerts, zones, batch = async_to_sync(scenario)()
         self.assertEqual(alerts, {"event": "alerts.changed", "data": {"active": [], "history": []}})
+        self.assertEqual(batch, {"event": "observations.created", "data": [{"id": 1}]})
         self.assertEqual(zones, {"event": "zones.changed", "data": [{"code": "salle"}]})

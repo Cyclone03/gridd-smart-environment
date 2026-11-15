@@ -19,6 +19,11 @@ describe("messages temps réel", () => {
       event: "observation.created",
       data: { id: 1 },
     });
+    expect(parse({ event: "observations.created", data: [{ id: 1 }, { id: 2 }] })).toEqual({
+      event: "observations.created",
+      data: [{ id: 1 }, { id: 2 }],
+    });
+    expect(parse({ event: "observations.created", data: { id: 1 } })).toBeNull();
     expect(parse({ event: "dashboard.error", detail: "Base indisponible" })).toEqual({
       event: "dashboard.error",
       detail: "Base indisponible",

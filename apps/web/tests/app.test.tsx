@@ -153,6 +153,19 @@ describe("analyse historique et période d'observation", () => {
       data: { ...realtime.state.latest[0], id: 100, value: 30, observed_at: now, received_at: now },
     });
     await waitFor(() => expect(stat()).toHaveTextContent("73"));
+    // Lot de mesures (message groupé du serveur).
+    const later = new Date(Date.now() + 1000).toISOString();
+    realtime.push({
+      event: "observations.created",
+      data: [101, 102].map((id) => ({
+        ...realtime.state.latest[0],
+        id,
+        value: 31,
+        observed_at: later,
+        received_at: later,
+      })),
+    });
+    await waitFor(() => expect(stat()).toHaveTextContent("75"));
     // Aucune nouvelle requête : la mesure vient du WebSocket.
     expect(requests.length).toBe(before);
   });

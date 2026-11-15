@@ -197,6 +197,12 @@ if REDIS_URL:
                         "socket_connect_timeout": 15,
                     }
                 ],
+                # Messages en attente par connexion avant rejet (défaut : 100).
+                "capacity": env_int("CHANNEL_CAPACITY", 500),
+                # Une connexion non renouvelée (ping toutes les 25 s) quitte ses
+                # groupes après ce délai, au lieu de 24 h par défaut : les
+                # connexions mortes après un redémarrage ne s'accumulent plus.
+                "group_expiry": env_int("CHANNEL_GROUP_EXPIRY_SECONDS", 120),
             },
         },
     }
@@ -353,5 +359,7 @@ LOGGING = {
         "django": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
         "modules": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
         "shared": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        # « N of M channels over capacity » est journalisé en INFO à chaque envoi.
+        "channels_redis": {"handlers": ["console"], "level": "WARNING", "propagate": False},
     },
 }

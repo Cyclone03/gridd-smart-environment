@@ -29,6 +29,8 @@ export type RealtimeMessage =
   | { event: "realtime.connected" }
   | { event: "dashboard.snapshot"; data: DashboardSnapshot }
   | { event: "observation.created"; data: Observation }
+  /** Lot de mesures (une seule diffusion par lot traité côté serveur). */
+  | { event: "observations.created"; data: Observation[] }
   | { event: "alerts.changed"; data: AlertsState }
   | { event: "zones.changed"; data: Zone[] }
   | { event: "dashboard.error"; detail: string }
@@ -52,6 +54,8 @@ export function parseRealtimeMessage(raw: string): RealtimeMessage | null {
       return { event: message.event };
     case "observation.created":
       return isObject(data) ? { event: "observation.created", data: data as Observation } : null;
+    case "observations.created":
+      return Array.isArray(data) ? { event: "observations.created", data: data as Observation[] } : null;
     case "alerts.changed":
       return isAlertsState(data) ? { event: "alerts.changed", data } : null;
     case "zones.changed":

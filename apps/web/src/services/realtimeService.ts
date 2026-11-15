@@ -44,6 +44,9 @@ export function subscribeToDashboard(handlers: DashboardSubscription): Dashboard
         case "observation.created":
           handlers.onObservation(message.data);
           break;
+        case "observations.created":
+          message.data.forEach(handlers.onObservation);
+          break;
         case "alerts.changed":
           handlers.onAlerts(message.data);
           break;

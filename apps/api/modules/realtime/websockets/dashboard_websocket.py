@@ -31,8 +31,8 @@ class DashboardWebSocket(BroadcastWebSocket):
         action = content.get("action") if isinstance(content, dict) else None
         if action == "snapshot":
             await self.send_snapshot()
-        elif action == "ping":
-            await self.send_json({"event": "pong"})
+        else:
+            await super().receive_json(content, **kwargs)
 
     async def send_snapshot(self):
         try:
