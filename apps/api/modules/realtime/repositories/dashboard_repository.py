@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.db.models import F, Prefetch
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from modules.database.models import Alert, Observation, Sensor, Zone
@@ -26,16 +26,17 @@ class DashboardRepository:
 
         Une requête par couple (zone, type) via l'index ``zone, type, -observed_at`` :
         un capteur très bavard ne masque pas une mesure moins fréquente.
+        Pas de ``NULLS LAST`` : sous PostgreSQL ce tri n'utilise pas l'index et
+        lisait toutes les mesures de la zone (≈ 5 s par requête, instantané
+        WebSocket au-delà de 15 s).
         """
         latest = []
         for zone in zones:
             for metric in MetricCatalog.keys():
-                observation = (
-                    Observation.objects.filter(zone=zone, type=metric)
-                    .select_related("zone", "sensor")
-                    .order_by(F("observed_at").desc(nulls_last=True), "-received_at")
-                    .first()
-                )
+                observations = Observation.objects.filter(zone=zone, type=metric).select_related("zone", "sensor")
+                observation = observations.filter(observed_at__isnull=False).order_by("-observed_at").first()
+                if observation is None:
+                    observation = observations.filter(observed_at__isnull=True).order_by("-pk").first()
                 if observation is not None:
                     latest.append(observation)
         return sorted(latest, key=lambda item: item.observed_at or item.received_at, reverse=True)

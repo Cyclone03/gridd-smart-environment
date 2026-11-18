@@ -87,3 +87,28 @@ class ZoneApiTests(TestCase):
 
         self.assertEqual(payload[0]["metrics"], ["temperature", "humidity"])
         self.assertEqual(self.client.get(f"/api/zones/{zone.id}/").json()["code"], "salle")
+
+
+class LatestObservationQueryTests(TestCase):
+    """Dernière mesure par zone et type : lecture par index, sans tri NULLS LAST."""
+
+    def test_latest_prefers_timestamped_readings_and_falls_back_to_untimestamped(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from modules.database.models import Observation, Sensor, Zone
+        from modules.observations.repositories.observation_repository import ObservationRepository
+
+        zone = Zone.objects.create(name="Salle", code="salle-q")
+        sensor = Sensor.objects.create(node_id="nq", sensor_type="temperature", zone=zone, unit="°C")
+        now = timezone.now()
+        Observation.objects.create(sensor=sensor, zone=zone, type="temperature", value=1, unit="°C", observed_at=None)
+        Observation.objects.create(sensor=sensor, zone=zone, type="temperature", value=2, unit="°C", observed_at=now)
+        Observation.objects.create(
+            sensor=sensor, zone=zone, type="temperature", value=3, unit="°C", observed_at=now - timedelta(hours=1)
+        )
+        repository = ObservationRepository()
+        self.assertEqual(repository.latest(zone, "temperature").value, 2)
+        Observation.objects.exclude(observed_at=None).delete()
+        self.assertEqual(repository.latest(zone, "temperature").value, 1)

@@ -193,10 +193,13 @@ if REDIS_URL:
                 "hosts": [
                     {
                         "address": REDIS_URL,
-                        # Un Redis lent ou injoignable doit échouer vite plutôt
-                        # que bloquer les WebSocket et la diffusion.
-                        "socket_timeout": env_int("REDIS_SOCKET_TIMEOUT_SECONDS", 5),
-                        "socket_connect_timeout": env_int("REDIS_SOCKET_TIMEOUT_SECONDS", 5),
+                        # DOIT rester supérieur à l'attente bloquante de
+                        # channels_redis (BZPOPMIN de 5 s) : à 5 s, chaque attente
+                        # sans message expirait (« Timeout reading from … »).
+                        # La réactivité des WebSocket vient des délais applicatifs
+                        # (5 s) de BroadcastWebSocket et RealtimeBroadcaster.
+                        "socket_timeout": max(env_int("REDIS_SOCKET_TIMEOUT_SECONDS", 15), 10),
+                        "socket_connect_timeout": 5,
                         "socket_keepalive": True,
                         # Vérifie une connexion restée inactive avant de la réutiliser.
                         "health_check_interval": 30,

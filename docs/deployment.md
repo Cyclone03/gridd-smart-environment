@@ -153,7 +153,7 @@ pas acceptée en 5 s : l'inscription au groupe `dashboard` attendait Redis.
   connexion Redis à chaque diffusion (~7 par lot de mesures). Il réutilise
   désormais une connexion persistante.
 - La connexion WebSocket est acceptée immédiatement ; si Redis ne répond pas
-  en 5 s (`REDIS_SOCKET_TIMEOUT_SECONDS`), le navigateur reçoit
+  en 5 s, le navigateur reçoit
   `dashboard.error` et la connexion est fermée proprement (reconnexion
   automatique).
 - `/api/health/` indique `"redis": "connected" | "error"` (statut `degraded`

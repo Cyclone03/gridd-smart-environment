@@ -430,3 +430,20 @@ class BatchHookFailureTests(SimpleTestCase):
             worker.process_batch([FakeKafkaMessage(1), FakeKafkaMessage(2)])
         self.assertEqual(consumer.commits, [])
         self.assertEqual(consumer.seeks, [(0, 1)])
+
+
+class RedisSettingsTests(SimpleTestCase):
+    def test_redis_read_timeout_exceeds_the_blocking_receive_of_channels_redis(self):
+        import importlib
+        import os
+        from unittest import mock
+
+        from channels_redis.core import RedisChannelLayer
+
+        import config.settings as project_settings
+
+        with mock.patch.dict(os.environ, {"REDIS_URL": "redis://example:6379/0", "REDIS_SOCKET_TIMEOUT_SECONDS": "5"}):
+            reloaded = importlib.reload(project_settings)
+            host = reloaded.CHANNEL_LAYERS["default"]["CONFIG"]["hosts"][0]
+        importlib.reload(project_settings)
+        self.assertGreater(host["socket_timeout"], RedisChannelLayer.brpop_timeout)
