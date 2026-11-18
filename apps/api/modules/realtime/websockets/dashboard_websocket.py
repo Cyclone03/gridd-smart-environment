@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from channels.db import database_sync_to_async
@@ -23,9 +24,12 @@ class DashboardWebSocket(BroadcastWebSocket):
     group_name = RealtimeGroups.DASHBOARD
     snapshot_service_class = DashboardSnapshotService
 
+    SNAPSHOT_TIMEOUT_SECONDS = 15.0
+
     async def connect(self):
         await super().connect()
-        await self.send_snapshot()
+        if self.joined:
+            await self.send_snapshot()
 
     async def receive_json(self, content, **kwargs):
         action = content.get("action") if isinstance(content, dict) else None
@@ -36,7 +40,9 @@ class DashboardWebSocket(BroadcastWebSocket):
 
     async def send_snapshot(self):
         try:
-            snapshot = await database_sync_to_async(self.snapshot_service_class().snapshot)()
+            snapshot = await asyncio.wait_for(
+                database_sync_to_async(self.snapshot_service_class().snapshot)(), self.SNAPSHOT_TIMEOUT_SECONDS
+            )
         except Exception:
             logger.exception("Impossible de construire l'instantané du tableau de bord.")
             await self.send_json(

@@ -28,3 +28,11 @@ class HealthApiTests(TestCase):
         self.assertEqual(body["status"], "degraded")
         self.assertTrue(body["data"]["stale"])
         self.assertGreater(body["data"]["age_seconds"], 3 * 3600)
+
+    def test_health_reports_an_unreachable_redis(self):
+        from django.test import override_settings
+
+        with override_settings(REDIS_URL="redis://127.0.0.1:1/0"):
+            body = self.client.get("/api/health/").json()
+        self.assertEqual(body["redis"], "error")
+        self.assertEqual(body["status"], "degraded")

@@ -124,6 +124,14 @@ Ce qui détermine le débit :
   offsets sont validés en un appel. Avant, chaque message attendait deux
   allers-retours avec le broker : quelques messages par seconde avec un
   Kafka distant, moins que le débit des capteurs, d'où un retard croissant.
+- **Enregistrement en base par lot** : les observations d'un lot sont
+  insérées ensemble (recherche des doublons + insertion groupée, ~4 requêtes
+  pour 500 mesures) et les zones / capteurs déjà connus restent en mémoire.
+  Avant : 7 requêtes par mesure, soit ~36 mesures/s avec une base distante.
+- **Préchargement limité** (`KAFKA_PREFETCH_MESSAGES`, 1000 par partition) :
+  pendant le rattrapage d'une partition, les mesures récentes des autres
+  partitions n'attendent plus derrière 100 000 messages préchargés (les zones
+  à jour prenaient elles aussi du retard).
 - **Moteur d'alarmes** : une règle toujours déclenchée (ex. « température >
   10 °C ») republiait l'alerte et l'état à chaque mesure. Désormais un état
   inchangé et une alerte « en cours » ne sont republiés qu'une fois par
@@ -133,6 +141,47 @@ Ce qui détermine le débit :
   `KAFKA_CONSUMER_STALL_SECONDS` arrête le processus, que Docker redémarre.
 
 Après un arrêt prolongé, l'arriéré est absorbé par lots en quelques minutes.
+
+### WebSocket coupés après 5 s (« took too long to shut down and was killed »)
+
+Symptôme dans les journaux de l'API : `WSCONNECTING /ws/dashboard/` puis
+`WSDISCONNECT` 5 s plus tard, sans `WSCONNECT`, suivi de « took too long to
+shut down and was killed ». Daphne coupe une connexion que l'application n'a
+pas acceptée en 5 s : l'inscription au groupe `dashboard` attendait Redis.
+
+- Cause principale corrigée : le module `realtime` ouvrait une nouvelle
+  connexion Redis à chaque diffusion (~7 par lot de mesures). Il réutilise
+  désormais une connexion persistante.
+- La connexion WebSocket est acceptée immédiatement ; si Redis ne répond pas
+  en 5 s (`REDIS_SOCKET_TIMEOUT_SECONDS`), le navigateur reçoit
+  `dashboard.error` et la connexion est fermée proprement (reconnexion
+  automatique).
+- `/api/health/` indique `"redis": "connected" | "error"` (statut `degraded`
+  si Redis ne répond pas).
+
+### « Invalid HTTP_HOST header: '<ip>:8000' »
+
+Robots qui interrogent l'adresse IP du serveur sur le port 8000 : la requête
+est refusée (400), c'est le comportement attendu. La trace n'est plus écrite.
+Pour ne plus exposer le port : `API_BIND=127.0.0.1` si le proxy tourne sur la
+même machine, sinon un pare-feu n'autorisant que le proxy.
+
+### « N of M channels over capacity in group dashboard »
+
+Message de `channels_redis` : la file d'attente de certaines connexions
+WebSocket est pleine, les messages suivants leur sont refusés.
+
+- **Connexions mortes** : après un redémarrage de l'API, les connexions de
+  l'ancien processus restaient inscrites au groupe 24 h (valeur par défaut)
+  et leur file se remplissait. Désormais une inscription expire après
+  `CHANNEL_GROUP_EXPIRY_SECONDS` (120 s) et chaque navigateur la renouvelle
+  par son ping (25 s) : les connexions mortes disparaissent seules.
+- **Rafales** : les mesures sont diffusées par lot (un message par lot). Pendant
+  un rattrapage, seules la dernière valeur par capteur et les mesures des
+  2 dernières minutes sont envoyées.
+- `CHANNEL_CAPACITY` (500) : messages en attente par connexion.
+
+Ce message est désormais filtré (niveau WARNING pour `channels_redis`).
 
 ### Données d’une partie des espaces absentes
 

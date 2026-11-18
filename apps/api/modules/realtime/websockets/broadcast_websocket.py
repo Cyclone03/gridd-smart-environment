@@ -1,4 +1,9 @@
+import asyncio
+import logging
+
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+
+logger = logging.getLogger(__name__)
 
 
 class BroadcastWebSocket(AsyncJsonWebsocketConsumer):
@@ -14,17 +19,42 @@ class BroadcastWebSocket(AsyncJsonWebsocketConsumer):
     """
 
     group_name = None
+    # Délai maximal d'un appel au channel layer (Redis).
+    CHANNEL_TIMEOUT_SECONDS = 5.0
+    # Code de fermeture « réessayer plus tard » : le navigateur se reconnecte.
+    TRY_AGAIN_LATER = 1013
+
+    joined = False
 
     async def connect(self):
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        # Accepter d'abord : Daphne coupe une connexion non acceptée après 5 s,
+        # et une tâche bloquée sur Redis ne pouvait plus être arrêtée
+        # (« took too long to shut down and was killed »).
         await self.accept()
+        self.joined = await self._channel_call(self.channel_layer.group_add, "inscription")
+        if not self.joined:
+            await self.send_json(
+                {"event": "dashboard.error", "detail": "Temps réel momentanément indisponible. Nouvelle tentative…"}
+            )
+            await self.close(code=self.TRY_AGAIN_LATER)
+            return
         await self.send_json(self.connected_message())
 
     def connected_message(self):
         return {"event": "realtime.connected"}
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        if self.joined:
+            await self._channel_call(self.channel_layer.group_discard, "désinscription")
+
+    async def _channel_call(self, operation, label) -> bool:
+        """Appel au channel layer borné dans le temps ; ``False`` en cas d'échec."""
+        try:
+            await asyncio.wait_for(operation(self.group_name, self.channel_name), self.CHANNEL_TIMEOUT_SECONDS)
+            return True
+        except Exception as exc:
+            logger.warning("WebSocket %s : %s impossible (%s).", self.group_name, label, exc.__class__.__name__ or exc)
+            return False
 
     async def observation_created(self, event):
         await self.send_json({"event": "observation.created", "data": event["payload"]})
@@ -46,7 +76,7 @@ class BroadcastWebSocket(AsyncJsonWebsocketConsumer):
         Le navigateur envoie un ``ping`` toutes les 25 s, ce qui garde les
         connexions vivantes inscrites.
         """
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self._channel_call(self.channel_layer.group_add, "renouvellement")
 
     async def alerts_changed(self, event):
         await self.send_json({"event": "alerts.changed", "data": event.get("payload")})

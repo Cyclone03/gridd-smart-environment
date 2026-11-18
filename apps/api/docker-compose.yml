@@ -11,7 +11,10 @@ services:
     env_file:
       - apps/api/.env
     ports:
-      - "${API_PORT:-8000}:8000"
+      # API_BIND=127.0.0.1 si le proxy (Caddy, nginx, cloudflared…) tourne sur
+      # la même machine : le port n'est alors plus exposé à Internet (robots
+      # qui interrogent l'IP brute, contournement de Cloudflare).
+      - "${API_BIND:-0.0.0.0}:${API_PORT:-8000}:8000"
     healthcheck:
       test:
         - CMD

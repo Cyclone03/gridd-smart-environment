@@ -95,3 +95,34 @@ class DashboardWebSocketTests(TransactionTestCase):
         self.assertEqual(alerts, {"event": "alerts.changed", "data": {"active": [], "history": []}})
         self.assertEqual(batch, {"event": "observations.created", "data": [{"id": 1}]})
         self.assertEqual(zones, {"event": "zones.changed", "data": [{"code": "salle"}]})
+
+
+@override_settings(CHANNEL_LAYERS=IN_MEMORY_LAYER)
+class UnavailableChannelLayerTests(TransactionTestCase):
+    """Redis bloqué : la connexion est acceptée puis fermée proprement
+    (le navigateur se reconnecte), au lieu de rester en attente."""
+
+    def test_a_hanging_channel_layer_closes_quickly_with_try_again_later(self):
+        import asyncio
+        from unittest import mock
+
+        from modules.realtime.websockets.broadcast_websocket import BroadcastWebSocket
+
+        async def hang(*args, **kwargs):
+            await asyncio.sleep(60)
+
+        async def scenario():
+            communicator = WebsocketCommunicator(URLRouter(websocket_urlpatterns), "/ws/dashboard/")
+            connected, _ = await communicator.connect(timeout=3)
+            error = await communicator.receive_json_from(timeout=3)
+            closed = await communicator.receive_output(timeout=3)
+            return connected, error, closed
+
+        with (
+            mock.patch.object(BroadcastWebSocket, "CHANNEL_TIMEOUT_SECONDS", 0.2),
+            mock.patch("channels.layers.InMemoryChannelLayer.group_add", hang),
+        ):
+            connected, error, closed = async_to_sync(scenario)()
+        self.assertTrue(connected)
+        self.assertEqual(error["event"], "dashboard.error")
+        self.assertEqual(closed, {"type": "websocket.close", "code": 1013})

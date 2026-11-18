@@ -193,8 +193,13 @@ if REDIS_URL:
                 "hosts": [
                     {
                         "address": REDIS_URL,
-                        "socket_timeout": 15,
-                        "socket_connect_timeout": 15,
+                        # Un Redis lent ou injoignable doit échouer vite plutôt
+                        # que bloquer les WebSocket et la diffusion.
+                        "socket_timeout": env_int("REDIS_SOCKET_TIMEOUT_SECONDS", 5),
+                        "socket_connect_timeout": env_int("REDIS_SOCKET_TIMEOUT_SECONDS", 5),
+                        "socket_keepalive": True,
+                        # Vérifie une connexion restée inactive avant de la réutiliser.
+                        "health_check_interval": 30,
                     }
                 ],
                 # Messages en attente par connexion avant rejet (défaut : 100).
@@ -364,5 +369,8 @@ LOGGING = {
         "shared": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
         # « N of M channels over capacity » est journalisé en INFO à chaque envoi.
         "channels_redis": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        # Requêtes de robots sur l'IP brute (« Invalid HTTP_HOST header ») : déjà
+        # refusées (400), inutile d'en écrire la trace complète.
+        "django.security.DisallowedHost": {"handlers": [], "level": "CRITICAL", "propagate": False},
     },
 }

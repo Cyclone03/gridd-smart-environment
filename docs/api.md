@@ -268,6 +268,7 @@ Messages envoyés par le serveur :
 | `{"event": "realtime.connected"}` | à l'ouverture |
 | `{"event": "dashboard.snapshot", "data": {"zones": […], "latest": […], "alerts": {"active": […], "history": […], "history_days": 7}}` | juste après l'ouverture, et en réponse à `{"action": "snapshot"}` |
 | `{"event": "observation.created", "data": {…}}` | chaque nouvelle observation validée (même forme que `/api/observations/`, plus `zone_code`) |
+| `{"event": "observations.created", "data": [{…}, …]}` | lot d'observations traité d'un coup par le serveur ; pendant le rattrapage d'un arriéré, seules la plus récente par capteur et les mesures des 2 dernières minutes sont envoyées |
 | `{"event": "alerts.changed", "data": {"active": […], "history": […], "history_days": 7}}` | une alerte a été créée, résolue ou modifiée |
 | `{"event": "zones.changed", "data": […]}` | une zone ou un capteur a été créé ou modifié (ingestion ou admin) |
 | `{"event": "dashboard.error", "detail": "…"}` | l'instantané n'a pas pu être lu (base indisponible) |
@@ -283,7 +284,7 @@ Actions acceptées du client :
 | Action | Effet |
 |---|---|
 | `{"action": "snapshot"}` | renvoie `dashboard.snapshot` (bouton « Rafraîchir ») |
-| `{"action": "ping"}` | renvoie `pong` (maintien de la connexion derrière un proxy, toutes les 25 s) |
+| `{"action": "ping"}` | renvoie `pong` et renouvelle l'inscription de la connexion (toutes les 25 s). Sans ping pendant `CHANNEL_GROUP_EXPIRY_SECONDS` (120 s), la connexion ne reçoit plus les diffusions |
 
 ### `/ws/zones/<code>/`
 

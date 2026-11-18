@@ -11,7 +11,7 @@ gridd_env/
 *.cert
 *.crt
 *metadata.json
-_apps
+
 # Django runtime
 .env
 .env.*
