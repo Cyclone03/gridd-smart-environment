@@ -5,12 +5,20 @@ from modules.database.producers.command_reply_producer import CommandReplyProduc
 from modules.database.producers.database_events_producer import DatabaseEventsProducer
 from modules.database.services.alarm_rule_persistence_service import AlarmRulePersistenceService
 from modules.database.services.alert_persistence_service import AlertPersistenceService
+from modules.database.services.climate_prediction_persistence_service import (
+    ClimatePredictionPersistenceService,
+)
+from modules.database.services.weather_snapshot_persistence_service import (
+    WeatherSnapshotPersistenceService,
+)
 from modules.database.services.observation_persistence_service import ObservationPersistenceService
+from modules.database.writers.climate_prediction_writer import ClimatePredictionWriter
 from modules.database.writers.alarm_rule_state_writer import AlarmRuleStateWriter
 from modules.database.writers.alarm_rule_writer import AlarmRuleWriter
 from modules.database.writers.alert_writer import AlertWriter
 from modules.database.writers.observation_writer import ObservationWriter
 from modules.database.writers.sensor_writer import SensorWriter
+from modules.database.writers.weather_snapshot_writer import WeatherSnapshotWriter
 from modules.database.writers.zone_writer import ZoneWriter
 from shared.caching.local_cache import LocalCache
 from shared.contracts.event_types import EventTypes
@@ -27,9 +35,11 @@ class PersistenceConsumer(EventHandler):
     avec ``reply_to``) reçoivent toujours une réponse, succès ou échec.
     """
 
-    def __init__(self, *, observations, alerts, rules, replies):
+    def __init__(self, *, observations, alerts, predictions, weather_snapshots, rules, replies):
         self._observations = observations
         self._alerts = alerts
+        self._predictions = predictions
+        self._weather_snapshots = weather_snapshots
         self._rules = rules
         self._replies = replies
         # Pendant un lot Kafka, les observations sont enregistrées ensemble à la fin.
@@ -56,6 +66,14 @@ class PersistenceConsumer(EventHandler):
                 state_writer=AlarmRuleStateWriter(),
                 producer=producer,
             ),
+            predictions=ClimatePredictionPersistenceService(
+                prediction_writer=ClimatePredictionWriter(),
+                producer=producer,
+            ),
+            weather_snapshots=WeatherSnapshotPersistenceService(
+                snapshot_writer=WeatherSnapshotWriter(),
+                producer=producer,
+            ),
             rules=AlarmRulePersistenceService(rule_writer=AlarmRuleWriter(), producer=producer),
             replies=CommandReplyProducer(publisher),
         )
@@ -63,6 +81,8 @@ class PersistenceConsumer(EventHandler):
     def routes(self):
         return {
             EventTypes.OBSERVATION_VALIDATED: self._observation,
+            EventTypes.CLIMATE_PREDICTION_GENERATED: lambda event: self._predictions.persist(event),
+            EventTypes.WEATHER_SNAPSHOT_GENERATED: lambda event: self._weather_snapshots.persist(event),
             EventTypes.ALERT_RAISED: lambda event: self._alerts.raise_alert(event.payload),
             EventTypes.ALERT_RESOLVED: lambda event: self._alerts.resolve_alert(event.payload),
             EventTypes.ALARM_STATE_SAVED: lambda event: self._alerts.save_state(event.payload),

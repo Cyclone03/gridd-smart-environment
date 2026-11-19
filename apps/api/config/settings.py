@@ -306,6 +306,9 @@ KAFKA_TOPICS = {
     "alarms_commands": os.getenv("KAFKA_TOPIC_ALARMS_COMMANDS", "gridd.backend.alarms.commands"),
     "database_events": os.getenv("KAFKA_TOPIC_DATABASE_EVENTS", "gridd.backend.database.events"),
     "database_replies": os.getenv("KAFKA_TOPIC_DATABASE_REPLIES", "gridd.backend.database.replies"),
+    "ai_prediction_events": os.getenv(
+        "KAFKA_TOPIC_AI_PREDICTIONS", "gridd.backend.ai_prediction.events"
+    ),
 }
 
 # Topics que le module Database persiste (vide = topics de sortie des modules métier).
@@ -313,6 +316,7 @@ DATABASE_SUBSCRIBED_TOPICS = env_list("DATABASE_SUBSCRIBED_TOPICS") or [
     KAFKA_TOPICS["ingestion_observations"],
     KAFKA_TOPICS["alarms_events"],
     KAFKA_TOPICS["alarms_commands"],
+    KAFKA_TOPICS["ai_prediction_events"],
 ]
 
 # Consumer group de chaque module : « <préfixe>.<module> ».

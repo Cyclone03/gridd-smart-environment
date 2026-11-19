@@ -1,19 +1,28 @@
 /**
- * Données partagées par toutes les vues : zones, dernières mesures, alertes
- * (actives et historique récent), état du temps réel et alertes consultées.
+ * Données partagées par toutes les vues : zones, dernières mesures, prédictions,
+ * alertes (actives et historique récent), état du temps réel et alertes consultées.
  *
  * Source unique : le WebSocket `/ws/dashboard/`. À chaque (re)connexion le
  * serveur envoie un instantané complet, puis les changements (mesures,
- * alertes, zones) avec leurs données. Aucune requête HTTP n'est faite pour
- * ces données, ni au chargement ni à intervalle régulier.
+ * prédictions, alertes, zones) avec leurs données. Les dernières prédictions
+ * persistées sont relues par REST au chargement et à chaque reconnexion.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ALERT_HISTORY_DAYS } from "../constants/alerts";
 import { REALTIME_BATCH_MS, STORAGE_KEYS } from "../constants/app";
+import { errorMessage, isAbortError } from "../requests/httpClient";
 import type { Alert } from "../resources/alert";
+import {
+  mergeLatestClimatePredictions,
+  type ClimatePrediction,
+  type ClimatePredictionZoneCode,
+} from "../resources/climatePrediction";
 import type { Observation } from "../resources/observation";
 import type { AlertsState } from "../resources/realtime";
+import { mergeLatestWeatherSnapshot, type WeatherSnapshot } from "../resources/weatherSnapshot";
 import type { Zone } from "../resources/zone";
+import { fetchLatestClimatePredictions } from "../services/climatePredictionService";
+import { fetchLatestWeatherSnapshot } from "../services/weatherSnapshotService";
 import { subscribeToDashboard, type DashboardConnection } from "../services/realtimeService";
 import type { RealtimeStatus } from "../types/common";
 import { latestByZone, mergeLatest, newestTimestamp, visibleZones, type LatestReadings } from "../utils/observations";
@@ -26,6 +35,14 @@ interface DashboardContextValue {
   /** Zones affichées (hors zones masquées). */
   zones: Zone[];
   latest: LatestReadings;
+  climatePredictions: ReadonlyMap<ClimatePredictionZoneCode, ClimatePrediction>;
+  climatePredictionsLoading: boolean;
+  climatePredictionsError: string | null;
+  climatePredictionDataInvalid: boolean;
+  weatherSnapshot: WeatherSnapshot | null;
+  weatherSnapshotLoading: boolean;
+  weatherSnapshotError: string | null;
+  weatherSnapshotDataInvalid: boolean;
   /** Alertes actives. */
   alerts: Alert[];
   /** Alertes résolues récentes (page Alertes). */
@@ -61,6 +78,16 @@ function loadReadIds(): number[] {
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [zones, setZones] = useState<Zone[]>([]);
   const [latest, setLatest] = useState<LatestReadings>(() => new Map());
+  const [climatePredictions, setClimatePredictions] = useState<
+    ReadonlyMap<ClimatePredictionZoneCode, ClimatePrediction>
+  >(() => new Map());
+  const [climatePredictionsLoading, setClimatePredictionsLoading] = useState(true);
+  const [climatePredictionsError, setClimatePredictionsError] = useState<string | null>(null);
+  const [climatePredictionDataInvalid, setClimatePredictionDataInvalid] = useState(false);
+  const [weatherSnapshot, setWeatherSnapshot] = useState<WeatherSnapshot | null>(null);
+  const [weatherSnapshotLoading, setWeatherSnapshotLoading] = useState(true);
+  const [weatherSnapshotError, setWeatherSnapshotError] = useState<string | null>(null);
+  const [weatherSnapshotDataInvalid, setWeatherSnapshotDataInvalid] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertHistory, setAlertHistory] = useState<Alert[]>([]);
   const [alertHistoryDays, setAlertHistoryDays] = useState(ALERT_HISTORY_DAYS);
@@ -71,6 +98,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [readAlertIds, setReadAlertIds] = useState<number[]>(loadReadIds);
 
   const connectionRef = useRef<DashboardConnection | null>(null);
+  const refreshPredictionsRef = useRef<() => void>(() => {});
+  const refreshWeatherRef = useRef<() => void>(() => {});
   const listenersRef = useRef(new Set<ObservationListener>());
   const zonesRef = useRef<Zone[]>([]);
   zonesRef.current = zones;
@@ -78,6 +107,60 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let pending: Observation[] = [];
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    let active = true;
+    let predictionRequest: AbortController | null = null;
+    let weatherRequest: AbortController | null = null;
+    let connectedOnce = false;
+
+    const refreshPredictions = () => {
+      predictionRequest?.abort();
+      const controller = new AbortController();
+      predictionRequest = controller;
+      setClimatePredictionsLoading(true);
+      void fetchLatestClimatePredictions(controller.signal)
+        .then(({ predictions, invalidCount }) => {
+          if (!active) return;
+          setClimatePredictions((current) => mergeLatestClimatePredictions(current, predictions));
+          setClimatePredictionDataInvalid(invalidCount > 0);
+          setClimatePredictionsError(null);
+        })
+        .catch((error: unknown) => {
+          if (!active || isAbortError(error)) return;
+          setClimatePredictionsError(errorMessage(error, "Impossible de charger les prédictions climatiques."));
+        })
+        .finally(() => {
+          if (!active || predictionRequest !== controller) return;
+          predictionRequest = null;
+          setClimatePredictionsLoading(false);
+        });
+    };
+    refreshPredictionsRef.current = refreshPredictions;
+    refreshPredictions();
+
+    const refreshWeather = () => {
+      weatherRequest?.abort();
+      const controller = new AbortController();
+      weatherRequest = controller;
+      setWeatherSnapshotLoading(true);
+      void fetchLatestWeatherSnapshot(controller.signal)
+        .then((snapshot) => {
+          if (!active) return;
+          setWeatherSnapshot((current) => mergeLatestWeatherSnapshot(current, snapshot));
+          setWeatherSnapshotDataInvalid(false);
+          setWeatherSnapshotError(null);
+        })
+        .catch((error: unknown) => {
+          if (!active || isAbortError(error)) return;
+          setWeatherSnapshotError(errorMessage(error, "Impossible de charger la météo extérieure."));
+        })
+        .finally(() => {
+          if (!active || weatherRequest !== controller) return;
+          weatherRequest = null;
+          setWeatherSnapshotLoading(false);
+        });
+    };
+    refreshWeatherRef.current = refreshWeather;
+    refreshWeather();
 
     const touch = (date: Date | null) => {
       if (date) setLastUpdate((current) => (current && current >= date ? current : date));
@@ -98,7 +181,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     };
 
     const connection = subscribeToDashboard({
-      onStatus: setStatus,
+      onStatus: (nextStatus) => {
+        setStatus(nextStatus);
+        if (nextStatus === "connected") {
+          if (connectedOnce) {
+            refreshPredictions();
+            refreshWeather();
+          }
+          connectedOnce = true;
+        }
+      },
       onSnapshot: (snapshot) => {
         zonesRef.current = snapshot.zones;
         setZones(snapshot.zones);
@@ -112,6 +204,18 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         pending.push(observation);
         flushTimer ??= setTimeout(flush, REALTIME_BATCH_MS);
       },
+      onClimatePrediction: (prediction) => {
+        setClimatePredictions((current) => mergeLatestClimatePredictions(current, [prediction]));
+        setClimatePredictionDataInvalid(false);
+        setClimatePredictionsError(null);
+      },
+      onInvalidClimatePrediction: () => setClimatePredictionDataInvalid(true),
+      onWeatherSnapshot: (snapshot) => {
+        setWeatherSnapshot((current) => mergeLatestWeatherSnapshot(current, snapshot));
+        setWeatherSnapshotDataInvalid(false);
+        setWeatherSnapshotError(null);
+      },
+      onInvalidWeatherSnapshot: () => setWeatherSnapshotDataInvalid(true),
       onAlerts: applyAlerts,
       onZones: (next) => {
         zonesRef.current = next;
@@ -121,6 +225,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     });
     connectionRef.current = connection;
     return () => {
+      active = false;
+      predictionRequest?.abort();
+      weatherRequest?.abort();
+      refreshPredictionsRef.current = () => {};
+      refreshWeatherRef.current = () => {};
       connection.close();
       connectionRef.current = null;
       if (flushTimer) clearTimeout(flushTimer);
@@ -129,6 +238,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(() => {
     connectionRef.current?.requestSnapshot();
+    refreshPredictionsRef.current();
+    refreshWeatherRef.current();
   }, []);
 
   const subscribeObservations = useCallback((listener: ObservationListener) => {
@@ -163,6 +274,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     () => ({
       zones: shownZones,
       latest,
+      climatePredictions,
+      climatePredictionsLoading,
+      climatePredictionsError,
+      climatePredictionDataInvalid,
+      weatherSnapshot,
+      weatherSnapshotLoading,
+      weatherSnapshotError,
+      weatherSnapshotDataInvalid,
       alerts,
       alertHistory,
       alertHistoryDays,
@@ -180,6 +299,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     [
       shownZones,
       latest,
+      climatePredictions,
+      climatePredictionsLoading,
+      climatePredictionsError,
+      climatePredictionDataInvalid,
+      weatherSnapshot,
+      weatherSnapshotLoading,
+      weatherSnapshotError,
+      weatherSnapshotDataInvalid,
       alerts,
       alertHistory,
       alertHistoryDays,

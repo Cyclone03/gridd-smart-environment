@@ -71,6 +71,50 @@ des données : les seuils d'alarme sont des [règles](#règles-dalarme).
 
 ### `GET /api/observations/latest/` — dernière observation de chaque zone et type
 
+### `GET /api/climate-predictions/latest/` — dernière prédiction par zone active
+
+Retourne un tableau contenant au plus une prédiction par zone active. Chaque
+objet reprend exactement les champs `data` de l'événement WebSocket
+`climate_prediction.created` ; une réponse vide est un tableau vide.
+
+```json
+[
+  {
+    "prediction_id": 17,
+    "prediction_event_id": "4b9ab2a9-98a8-47d1-92d0-b794957ca4a7",
+    "zone_code": "open-workspace",
+    "generated_at": "2026-11-15T18:00:00+00:00",
+    "target_at": "2026-11-15T19:00:00+00:00",
+    "predicted_temperature_c": 23.5,
+    "predicted_humidity_percent": 45.0,
+    "model_version": "zone-1-v1",
+    "prediction_mode": "experimental"
+  }
+]
+```
+
+### `GET /api/weather/latest/` — dernier instantané Open-Meteo
+
+Retourne le dernier instantané météo commun à tous les espaces, ou `null` si
+aucun instantané n'a encore été persisté. Les valeurs H+1 sont une référence
+météo externe ; elles ne sont pas des prédictions de température ou d'humidité
+intérieures et ne sont pas utilisées comme entrées du modèle.
+
+```json
+{
+  "weather_snapshot_id": 8,
+  "weather_snapshot_event_id": "88b8053b-634b-4a43-92b0-c22bed310001",
+  "generated_at": "2026-11-15T18:00:00+00:00",
+  "provider": "open-meteo",
+  "current_at": "2026-11-15T18:00:00+00:00",
+  "current_temperature_c": 18.5,
+  "current_relative_humidity_percent": 55.0,
+  "forecast_h1_at": "2026-11-15T19:00:00+00:00",
+  "forecast_h1_temperature_c": 19.0,
+  "forecast_h1_relative_humidity_percent": 57.0
+}
+```
+
 Types de mesure : `temperature`, `humidity`, `sound_level`, `occupancy`, `co2`.
 
 ## Historique
@@ -268,6 +312,8 @@ Messages envoyés par le serveur :
 | `{"event": "realtime.connected"}` | à l'ouverture |
 | `{"event": "dashboard.snapshot", "data": {"zones": […], "latest": […], "alerts": {"active": […], "history": […], "history_days": 7}}` | juste après l'ouverture, et en réponse à `{"action": "snapshot"}` |
 | `{"event": "observation.created", "data": {…}}` | chaque nouvelle observation validée (même forme que `/api/observations/`, plus `zone_code`) |
+| `{"event": "climate_prediction.created", "data": {…}}` | une prédiction persistée, diffusée au groupe global et au groupe de sa zone |
+| `{"event": "weather_snapshot.created", "data": {…}}` | un instantané météo Open-Meteo persisté, diffusé au groupe global |
 | `{"event": "alerts.changed", "data": {"active": […], "history": […], "history_days": 7}}` | une alerte a été créée, résolue ou modifiée |
 | `{"event": "zones.changed", "data": […]}` | une zone ou un capteur a été créé ou modifié (ingestion ou admin) |
 | `{"event": "dashboard.error", "detail": "…"}` | l'instantané n'a pas pu être lu (base indisponible) |
@@ -278,6 +324,56 @@ Formes : `zones` comme `GET /api/zones/`, `latest` comme
 `history` contient les alertes résolues des `REALTIME_ALERT_HISTORY_DAYS`
 derniers jours (au plus `REALTIME_ALERT_HISTORY_LIMIT`).
 
+Exemple `climate_prediction.created` :
+
+```json
+{
+  "event": "climate_prediction.created",
+  "data": {
+    "prediction_id": 17,
+    "prediction_event_id": "4b9ab2a9-98a8-47d1-92d0-b794957ca4a7",
+    "zone_code": "open-workspace",
+    "generated_at": "2026-11-15T18:00:00+00:00",
+    "target_at": "2026-11-15T19:00:00+00:00",
+    "predicted_temperature_c": 23.5,
+    "predicted_humidity_percent": 45.0,
+    "model_version": "modelZone1:sha256:…",
+    "prediction_mode": "operational"
+  }
+}
+```
+
+Le même événement de prédiction est envoyé sur `/ws/dashboard/` et sur
+`/ws/zones/<zone_code>/` pour la zone correspondante uniquement.
+`prediction_mode` vaut `experimental` ou `operational`. Le message représente
+un fait reçu après persistance dans Database; la livraison de bout en bout
+n'est pas garantie en cas de panne Kafka entre le commit PostgreSQL et la
+publication sur `database.events`.
+
+Exemple `weather_snapshot.created` (mêmes champs que
+`GET /api/weather/latest/`) :
+
+```json
+{
+  "event": "weather_snapshot.created",
+  "data": {
+    "weather_snapshot_id": 8,
+    "weather_snapshot_event_id": "88b8053b-634b-4a43-92b0-c22bed310001",
+    "generated_at": "2026-11-15T18:00:00+00:00",
+    "provider": "open-meteo",
+    "current_at": "2026-11-15T18:00:00+00:00",
+    "current_temperature_c": 18.5,
+    "current_relative_humidity_percent": 55.0,
+    "forecast_h1_at": "2026-11-15T19:00:00+00:00",
+    "forecast_h1_temperature_c": 19.0,
+    "forecast_h1_relative_humidity_percent": 57.0
+  }
+}
+```
+
+L'instantané météo est diffusé au groupe `/ws/dashboard/` uniquement, après
+avoir été persisté par Database.
+
 Actions acceptées du client :
 
 | Action | Effet |
@@ -287,4 +383,5 @@ Actions acceptées du client :
 
 ### `/ws/zones/<code>/`
 
-Observations d'une seule zone (`observation.created`).
+Observations et prédictions d'une seule zone (`observation.created` et
+`climate_prediction.created`).

@@ -41,6 +41,21 @@ class DataCollectionServiceTests(unittest.TestCase):
         weather_client.fetch.assert_called_once_with()
         gridd_client.fetch_latest.assert_called_once_with(("meeting-room",))
 
+        features = service.build_model_features(
+            result,
+            "meeting-room",
+            weather_point=result.weather.current,
+        )
+
+        self.assertEqual(
+            list(features.items()),
+            [
+                ("indoor_temperature", 21.5),
+                ("indoor_humidity", 42.0),
+                ("outdoor_temperature", 14.0),
+                ("outdoor_humidity", 70.0),
+            ],
+        )
 
 if __name__ == "__main__":
     unittest.main()

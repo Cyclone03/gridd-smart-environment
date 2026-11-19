@@ -1,13 +1,17 @@
 import uuid
+from datetime import timedelta
+from unittest.mock import patch
 
-from django.test import TestCase
+from django.db import OperationalError
+from django.apps import apps
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from modules.database.consumers.persistence_consumer import PersistenceConsumer
-from modules.database.models import AlarmRule, Alert, Observation, Zone
+from modules.database.models import AlarmRule, Alert, ClimatePrediction, Observation, WeatherSnapshot, Zone
 from shared.contracts.event_types import EventTypes
 from shared.contracts.topics import Topics
-from shared.messaging import Event, InboundMessage
+from shared.messaging import Event, InboundMessage, MessageRejected
 
 
 class RecordingPublisher:
@@ -52,6 +56,50 @@ class PersistenceConsumerTests(TestCase):
         }
         return Event(type=EventTypes.OBSERVATION_VALIDATED, payload=payload, source="ingestion")
 
+    def prediction_event(
+        self,
+        *,
+        event_id=None,
+        prediction_mode="experimental",
+        zone_code="open-workspace",
+        generated_at=None,
+    ):
+        generated = generated_at or timezone.now().replace(microsecond=0)
+        return Event(
+            type=EventTypes.CLIMATE_PREDICTION_GENERATED,
+            payload={
+                "zone_code": zone_code,
+                "generated_at": generated.isoformat(),
+                "target_at": (generated + timedelta(hours=1)).isoformat(),
+                "predicted_temperature_c": 23.5,
+                "predicted_humidity_percent": 45.0,
+                "model_version": "zone-1-test",
+                "prediction_mode": prediction_mode,
+            },
+            source="ai_prediction_service",
+            event_id=event_id or str(uuid.uuid4()),
+            occurred_at=generated.isoformat(),
+        )
+
+    def weather_snapshot_event(self, *, event_id=None, generated_at=None):
+        generated = generated_at or timezone.now().replace(microsecond=0)
+        return Event(
+            type=EventTypes.WEATHER_SNAPSHOT_GENERATED,
+            payload={
+                "generated_at": generated.isoformat(),
+                "provider": "open-meteo",
+                "current_at": generated.isoformat(),
+                "current_temperature_c": 18.5,
+                "current_relative_humidity_percent": 55.0,
+                "forecast_h1_at": (generated + timedelta(hours=1)).isoformat(),
+                "forecast_h1_temperature_c": 19.0,
+                "forecast_h1_relative_humidity_percent": 57.0,
+            },
+            source="ai_prediction_service",
+            event_id=event_id or str(uuid.uuid4()),
+            occurred_at=generated.isoformat(),
+        )
+
     def test_zones_changed_is_published_only_when_the_zone_list_changes(self):
         def deliver(node_id, name="Salle"):
             event = self.observation_event(str(uuid.uuid4()))
@@ -77,6 +125,145 @@ class PersistenceConsumerTests(TestCase):
         persisted = self.published(EventTypes.OBSERVATION_PERSISTED)
         self.assertEqual(len(persisted), 1)
         self.assertEqual(persisted[0].payload["zone_code"], "salle")
+
+    def test_climate_prediction_is_persisted_and_published_after_insert(self):
+        zone = Zone.objects.create(name="Espace ouvert", code="open-workspace")
+        event = self.prediction_event()
+        original_publish = self.publisher.publish
+
+        def assert_persisted_before_publish(topic, published_event, key=None):
+            self.assertEqual(ClimatePrediction.objects.count(), 1)
+            self.assertEqual(topic, Topics.database_events())
+            self.assertEqual(key, zone.code)
+            original_publish(topic, published_event, key)
+
+        with patch.object(self.publisher, "publish", side_effect=assert_persisted_before_publish):
+            self.deliver(event, topic=Topics.ai_prediction_events())
+
+        prediction = ClimatePrediction.objects.get()
+        self.assertEqual(prediction.zone, zone)
+        self.assertEqual(prediction.event_id, uuid.UUID(event.event_id))
+        self.assertEqual(prediction.prediction_mode, ClimatePrediction.PredictionMode.EXPERIMENTAL)
+        persisted = self.published(EventTypes.CLIMATE_PREDICTION_PERSISTED)
+        self.assertEqual(len(persisted), 1)
+        self.assertEqual(persisted[0].payload["prediction_event_id"], event.event_id)
+        self.assertEqual(persisted[0].payload["prediction_id"], prediction.pk)
+
+    def test_prediction_modes_are_persisted_distinctly(self):
+        Zone.objects.create(name="Espace ouvert", code="open-workspace")
+        for mode in ("experimental", "operational"):
+            self.deliver(self.prediction_event(prediction_mode=mode))
+        self.assertCountEqual(
+            ClimatePrediction.objects.values_list("prediction_mode", flat=True),
+            ["experimental", "operational"],
+        )
+
+    def test_redelivered_prediction_is_persisted_and_published_once(self):
+        Zone.objects.create(name="Espace ouvert", code="open-workspace")
+        event = self.prediction_event()
+        self.deliver(event, topic=Topics.ai_prediction_events())
+        self.deliver(event, topic=Topics.ai_prediction_events())
+        self.assertEqual(ClimatePrediction.objects.count(), 1)
+        self.assertEqual(len(self.published(EventTypes.CLIMATE_PREDICTION_PERSISTED)), 1)
+
+    def test_invalid_prediction_contract_and_unknown_zone_are_rejected(self):
+        Zone.objects.create(name="Espace ouvert", code="open-workspace")
+        Zone.objects.create(name="Zone inactive", code="inactive-zone", active=False)
+        invalid_events = [
+            self.prediction_event(zone_code="unknown-zone"),
+            self.prediction_event(zone_code="inactive-zone"),
+            self.prediction_event(prediction_mode="preview"),
+            self.prediction_event(generated_at=timezone.now().replace(tzinfo=None)),
+            self.prediction_event(),
+            self.prediction_event(),
+        ]
+        invalid_events[0].payload["zone_code"] = "unknown-zone"
+        invalid_events[1].payload["zone_code"] = "inactive-zone"
+        invalid_events[2].payload["prediction_mode"] = "preview"
+        invalid_events[3].payload["generated_at"] = "2026-01-01T10:00:00"
+        del invalid_events[4].payload["model_version"]
+        invalid_events[5].payload["predicted_humidity_percent"] = float("nan")
+        for event in invalid_events:
+            with self.subTest(payload=event.payload):
+                with self.assertRaises(MessageRejected):
+                    self.deliver(event, topic=Topics.ai_prediction_events())
+        self.assertEqual(ClimatePrediction.objects.count(), 0)
+        self.assertEqual(self.published(EventTypes.CLIMATE_PREDICTION_PERSISTED), [])
+
+    def test_reused_event_id_with_different_values_is_rejected(self):
+        Zone.objects.create(name="Espace ouvert", code="open-workspace")
+        event = self.prediction_event()
+        self.deliver(event, topic=Topics.ai_prediction_events())
+        changed = Event(
+            type=event.type,
+            payload={**event.payload, "predicted_temperature_c": 24.0},
+            source=event.source,
+            event_id=event.event_id,
+            occurred_at=event.occurred_at,
+        )
+        with self.assertRaises(MessageRejected):
+            self.deliver(changed, topic=Topics.ai_prediction_events())
+        self.assertEqual(ClimatePrediction.objects.count(), 1)
+        self.assertEqual(len(self.published(EventTypes.CLIMATE_PREDICTION_PERSISTED)), 1)
+
+    def test_database_error_does_not_publish_prediction_persisted(self):
+        Zone.objects.create(name="Espace ouvert", code="open-workspace")
+        event = self.prediction_event()
+        with patch(
+            "modules.database.writers.climate_prediction_writer.ClimatePrediction.objects.get_or_create",
+            side_effect=OperationalError("isolated database failure"),
+        ):
+            with self.assertRaises(OperationalError):
+                self.deliver(event, topic=Topics.ai_prediction_events())
+        self.assertEqual(self.published(EventTypes.CLIMATE_PREDICTION_PERSISTED), [])
+
+    def test_weather_snapshot_is_persisted_idempotently_and_published(self):
+        event = self.weather_snapshot_event()
+        self.deliver(event, topic=Topics.ai_prediction_events())
+        self.deliver(event, topic=Topics.ai_prediction_events())
+
+        snapshot = WeatherSnapshot.objects.get()
+        persisted = self.published(EventTypes.WEATHER_SNAPSHOT_PERSISTED)
+        self.assertEqual(WeatherSnapshot.objects.count(), 1)
+        self.assertEqual(snapshot.event_id, uuid.UUID(event.event_id))
+        self.assertEqual(len(persisted), 1)
+        self.assertEqual(persisted[0].payload["weather_snapshot_id"], snapshot.pk)
+        self.assertEqual(persisted[0].payload["weather_snapshot_event_id"], event.event_id)
+
+    def test_invalid_weather_snapshot_contract_is_rejected(self):
+        invalid_events = [
+            self.weather_snapshot_event(),
+            self.weather_snapshot_event(),
+            self.weather_snapshot_event(),
+            self.weather_snapshot_event(),
+            self.weather_snapshot_event(),
+        ]
+        invalid_events[0].payload["provider"] = "other-provider"
+        invalid_events[1].payload["forecast_h1_at"] = invalid_events[1].payload["generated_at"]
+        invalid_events[2].payload["current_relative_humidity_percent"] = 101
+        invalid_events[3].payload["forecast_h1_temperature_c"] = float("nan")
+        del invalid_events[4].payload["current_at"]
+
+        for event in invalid_events:
+            with self.subTest(payload=event.payload):
+                with self.assertRaises(MessageRejected):
+                    self.deliver(event, topic=Topics.ai_prediction_events())
+
+        self.assertEqual(WeatherSnapshot.objects.count(), 0)
+        self.assertEqual(self.published(EventTypes.WEATHER_SNAPSHOT_PERSISTED), [])
+
+    def test_publisher_error_is_not_swallowed_after_successful_persistence(self):
+        Zone.objects.create(name="Espace ouvert", code="open-workspace")
+        event = self.prediction_event()
+        with patch.object(
+            self.publisher,
+            "publish",
+            side_effect=RuntimeError("isolated publisher failure"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.deliver(event, topic=Topics.ai_prediction_events())
+        self.assertEqual(ClimatePrediction.objects.count(), 1)
+
 
     def test_alert_raised_twice_keeps_a_single_active_alert(self):
         Zone.objects.create(name="Salle", code="salle")
@@ -160,3 +347,17 @@ class BatchPersistenceTests(PersistenceConsumerTests):
         with self.assertNumQueries(4):
             consumer.end_batch()
         self.assertEqual(Observation.objects.count(), 101)
+
+
+class DatabasePredictionSubscriptionTests(TestCase):
+    @override_settings(
+        DATABASE_SUBSCRIBED_TOPICS=["gridd.backend.ai_prediction.events"],
+        KAFKA_TOPICS={"alarms_commands": "gridd.backend.alarms.commands"},
+    )
+    def test_database_subscribes_to_the_ai_prediction_topic(self):
+        subscriptions = apps.get_app_config("core").subscriptions()
+        self.assertEqual(len(subscriptions), 1)
+        self.assertEqual(
+            subscriptions[0].topics,
+            ("gridd.backend.ai_prediction.events",),
+        )

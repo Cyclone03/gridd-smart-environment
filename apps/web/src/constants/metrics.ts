@@ -20,7 +20,7 @@ export const METRIC_VISUALS: Record<MetricType, MetricVisual> = {
 };
 
 /** Ordre d'affichage des mesures suivies par l'interface. */
-export const DISPLAY_METRICS: DisplayMetric[] = ["temperature", "humidity", "sound_level", "occupancy"];
+export const DISPLAY_METRICS: DisplayMetric[] = ["temperature", "humidity", "sound_level"];
 
 /** Unités canoniques, utilisées quand une mesure n'a pas encore de valeur. */
 export const METRIC_UNITS: Record<MetricType, string> = {

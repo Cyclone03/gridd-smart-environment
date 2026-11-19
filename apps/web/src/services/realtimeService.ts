@@ -1,5 +1,9 @@
 import { openReconnectingSocket } from "../requests/realtimeSocket";
 import type { Observation } from "../resources/observation";
+import { isClimatePredictionEvent } from "../resources/climatePrediction";
+import type { ClimatePrediction } from "../resources/climatePrediction";
+import { isWeatherSnapshotEvent } from "../resources/weatherSnapshot";
+import type { WeatherSnapshot } from "../resources/weatherSnapshot";
 import {
   parseRealtimeMessage,
   type AlertsState,
@@ -13,6 +17,10 @@ export interface DashboardSubscription {
   /** État complet : à chaque (re)connexion et après `requestSnapshot()`. */
   onSnapshot: (snapshot: DashboardSnapshot) => void;
   onObservation: (observation: Observation) => void;
+  onClimatePrediction: (prediction: ClimatePrediction) => void;
+  onInvalidClimatePrediction: () => void;
+  onWeatherSnapshot: (snapshot: WeatherSnapshot) => void;
+  onInvalidWeatherSnapshot: () => void;
   onAlerts: (alerts: AlertsState) => void;
   onZones: (zones: Zone[]) => void;
   /** Le serveur n'a pas pu lire les données (base indisponible…). */
@@ -36,13 +44,23 @@ export function subscribeToDashboard(handlers: DashboardSubscription): Dashboard
     onStatus: handlers.onStatus,
     onMessage: (raw) => {
       const message = parseRealtimeMessage(raw);
-      if (!message) return;
+      if (!message) {
+        if (isClimatePredictionEvent(raw)) handlers.onInvalidClimatePrediction();
+        if (isWeatherSnapshotEvent(raw)) handlers.onInvalidWeatherSnapshot();
+        return;
+      }
       switch (message.event) {
         case "dashboard.snapshot":
           handlers.onSnapshot(message.data);
           break;
         case "observation.created":
           handlers.onObservation(message.data);
+          break;
+        case "climate_prediction.created":
+          handlers.onClimatePrediction(message.data);
+          break;
+        case "weather_snapshot.created":
+          handlers.onWeatherSnapshot(message.data);
           break;
         case "observations.created":
           message.data.forEach(handlers.onObservation);

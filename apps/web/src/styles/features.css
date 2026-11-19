@@ -688,6 +688,160 @@
   }
 }
 
+.climate-predictions {
+  margin-top: 20px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+}
+.climate-predictions-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+}
+.climate-predictions-head h2 {
+  margin: 5px 0 0;
+  font-size: 19px;
+}
+.selected-prediction-zone {
+  margin: 18px 0 -8px;
+  font-size: 15px;
+}
+.prediction-zone-select {
+  min-width: 220px;
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.prediction-zone-select select {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+}
+.prediction-values {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+.prediction-value {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid #e1e8e6;
+  border-radius: 8px;
+  background: var(--soft);
+}
+.prediction-value > span {
+  color: #697873;
+  font-size: 11px;
+}
+.prediction-value strong {
+  font-size: 20px;
+}
+.prediction-value small {
+  color: #87928e;
+  font-size: 10px;
+}
+.prediction-value.predicted {
+  border-color: #d7e8e2;
+  background: #f3f8f6;
+}
+.prediction-target {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.climate-predictions > .outdoor-weather {
+  margin-top: 18px;
+}
+.climate-predictions > .outdoor-weather .outdoor-weather-values {
+  max-width: 440px;
+}
+.climate-predictions > .outdoor-weather .outdoor-weather-values p strong {
+  font-size: 18px;
+}
+.prediction-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 26px;
+  margin: 18px 0 0;
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+}
+.prediction-details > div {
+  min-width: 130px;
+}
+.prediction-details dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+.prediction-details dd {
+  margin: 5px 0 0;
+  font-size: 12px;
+  font-weight: 650;
+}
+.prediction-mode,
+.prediction-expired {
+  display: inline-flex;
+  margin-right: 7px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: #e8f1ed;
+  color: #32634f;
+  font-size: 10px;
+  font-weight: 700;
+}
+.prediction-mode.experimental {
+  background: #fff1dc;
+  color: #875916;
+}
+.prediction-expired {
+  background: #fce9e7;
+  color: #a63d34;
+}
+.prediction-empty,
+.prediction-notice {
+  margin: 15px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.prediction-notice {
+  padding: 10px 12px;
+  border-radius: 7px;
+  background: #f3f6f5;
+}
+.prediction-error {
+  color: #a63d34;
+  background: #fce9e7;
+}
+@media (max-width: 1000px) {
+  .prediction-values {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .climate-predictions-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .prediction-zone-select {
+    min-width: 0;
+  }
+  .prediction-values {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Badges shown on each monitored space. */
 .zone-card-badges {
   display: flex;

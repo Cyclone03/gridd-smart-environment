@@ -51,23 +51,54 @@ gridd/
 └── .github/workflows/   # intégration continue
 ```
 
-## Démarrage rapide (Docker)
+## Démarrage complet (Docker local)
+
+Depuis la racine du dépôt, une seule commande construit et démarre la pile
+locale isolée :
 
 ```bash
-# 1. API + modules (workers) + Kafka + PostgreSQL + Redis
-cd apps/api
-cp .env.example .env            # renseigner au minimum DJANGO_SECRET_KEY et DB_PASSWORD
-docker compose up -d --build
-docker compose exec api python manage.py seed_gridd        # données de démonstration
-docker compose exec api python manage.py createsuperuser
-
-# 2. Frontend (indépendant de l'API)
-cd ../web
-cp .env.example .env            # GRIDD_API_URL=http://localhost:8000
-docker compose up -d --build
+docker compose up --build -d
 ```
 
-Ouvrir <http://localhost:3000>. L'admin Django est sur <http://localhost:8000/admin/>.
+Elle démarre PostgreSQL local (volume dédié), Redis, Kafka KRaft, l'API Django
+(migrations et zones de base), les consommateurs Kafka, le worker IA et le
+dashboard React. Les événements internes restent sur le Kafka local. Le
+conteneur `consumers` lit les paramètres du broker des capteurs dans le vrai
+fichier [`apps/api/.env`](apps/api/.env) et monte son certificat depuis
+`apps/api/secret/gridd-kafka-ca.crt`; ces fichiers ne sont ni copiés dans les
+images ni modifiés.
+
+- Dashboard : <http://localhost:3000>
+- API et WebSocket : <http://localhost:8001> et `ws://localhost:8001`
+- Kafka local pour les producteurs sur l'hôte : `localhost:19092`
+
+Arrêter sans supprimer les données persistées :
+
+```bash
+docker compose down
+```
+
+Les volumes nommés sont conservés. Ne faire `docker compose down -v` que si
+la suppression explicite de la base locale, du ledger IA et des données Kafka
+est souhaitée.
+
+**Aucune mesure simulée n'est créée.** Le compose initialise les six zones et
+leurs capteurs, mais le worker attend des observations réelles arrivant sur
+le broker capteurs configuré dans `apps/api/.env`. Les observations reçues
+seront traitées par les modules et persistées dans PostgreSQL local; les
+événements internes ne sont pas publiés sur le broker capteurs. Sans nouvelles
+mesures réelles, il ne publiera pas de prédiction. Les prédictions restent
+expérimentales. De plus, le
+chargement des scalers `.joblib` est volontairement non autorisé dans cette
+configuration tant que leurs empreintes exactes n'ont pas reçu une approbation
+explicite.
+
+Suivi de démarrage et diagnostic :
+
+```bash
+docker compose ps
+docker compose logs -f api consumers ai-prediction web
+```
 
 Pour un environnement de développement sans Docker, voir
 [`docs/installation.md`](docs/installation.md).

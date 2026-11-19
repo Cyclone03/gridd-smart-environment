@@ -1,3 +1,4 @@
+from modules.observations.repositories.climate_prediction_repository import ClimatePredictionRepository
 from modules.observations.repositories.observation_repository import ObservationRepository
 from modules.observations.repositories.zone_repository import ZoneRepository
 from shared.metrics.metric_catalog import MetricCatalog
@@ -8,9 +9,10 @@ class ObservationService:
 
     FEED_LIMIT = 1000
 
-    def __init__(self, observations=None, zones=None):
+    def __init__(self, observations=None, zones=None, climate_predictions=None):
         self._observations = observations or ObservationRepository()
         self._zones = zones or ZoneRepository()
+        self._climate_predictions = climate_predictions or ClimatePredictionRepository()
 
     def feed(self, zone_code=None, metric=None):
         return self._observations.recent(zone_code=zone_code, metric=metric, limit=self.FEED_LIMIT)
@@ -43,3 +45,6 @@ class ObservationService:
             if observation is not None:
                 latest[metric] = observation
         return zone, latest
+
+    def latest_climate_predictions(self):
+        return self._climate_predictions.latest_by_zone()

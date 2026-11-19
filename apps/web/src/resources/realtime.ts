@@ -1,6 +1,11 @@
 import type { Alert } from "./alert";
 import type { Observation } from "./observation";
 import type { Zone } from "./zone";
+import { parseClimatePredictionData, type ClimatePrediction } from "./climatePrediction";
+import { parseWeatherSnapshotData, type WeatherSnapshot } from "./weatherSnapshot";
+
+export type { ClimatePrediction } from "./climatePrediction";
+export type { WeatherSnapshot } from "./weatherSnapshot";
 
 /**
  * Messages échangés sur le WebSocket `/ws/dashboard/` (voir docs/api.md).
@@ -29,6 +34,8 @@ export type RealtimeMessage =
   | { event: "realtime.connected" }
   | { event: "dashboard.snapshot"; data: DashboardSnapshot }
   | { event: "observation.created"; data: Observation }
+  | { event: "climate_prediction.created"; data: ClimatePrediction }
+  | { event: "weather_snapshot.created"; data: WeatherSnapshot }
   /** Lot de mesures (une seule diffusion par lot traité côté serveur). */
   | { event: "observations.created"; data: Observation[] }
   | { event: "alerts.changed"; data: AlertsState }
@@ -54,6 +61,14 @@ export function parseRealtimeMessage(raw: string): RealtimeMessage | null {
       return { event: message.event };
     case "observation.created":
       return isObject(data) ? { event: "observation.created", data: data as Observation } : null;
+    case "climate_prediction.created": {
+      const prediction = parseClimatePredictionData(data);
+      return prediction ? { event: "climate_prediction.created", data: prediction } : null;
+    }
+    case "weather_snapshot.created": {
+      const snapshot = parseWeatherSnapshotData(data);
+      return snapshot ? { event: "weather_snapshot.created", data: snapshot } : null;
+    }
     case "observations.created":
       return Array.isArray(data) ? { event: "observations.created", data: data as Observation[] } : null;
     case "alerts.changed":

@@ -1,17 +1,20 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
-import { alert, dashboardApi, history, observations, renderApp, rule } from "./helpers";
+import { describe, expect, it, vi } from "vitest";
+import { REALTIME_RECONNECT_MS } from "../src/constants/app";
+import { alert, climatePrediction, dashboardApi, history, observations, renderApp, rule, weatherSnapshot, zones } from "./helpers";
 
 describe("routes et vues principales", () => {
   it("affiche la vue d'ensemble avec les données de l'API", async () => {
     dashboardApi();
     renderApp("/");
     expect(await screen.findByRole("heading", { name: "État environnemental du laboratoire" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("22,4 °C")).toBeInTheDocument());
-    expect(screen.getByText("Espaces suivis").nextSibling).toHaveTextContent("2");
+    await waitFor(() => expect(screen.getAllByText("22,4 °C").length).toBeGreaterThan(0));
+    expect(screen.getByText("Espaces suivis").nextSibling).toHaveTextContent("1");
     expect(screen.queryByText("Confort thermique")).not.toBeInTheDocument();
     expect(screen.queryByText("Énergie estimée (24 h)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Nombre de personnes dans le GRIDD")).not.toBeInTheDocument();
+    expect(screen.queryByText("Taux d'occupation")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Confort" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Énergie" })).not.toBeInTheDocument();
     expect(document.title).toBe("Vue d'ensemble · GRIDD");
@@ -23,7 +26,34 @@ describe("routes et vues principales", () => {
     const card = (await screen.findByRole("heading", { name: "Salle de réunion" })).closest("article")!;
     expect(within(card).getByText("Température")).toBeInTheDocument();
     expect(within(card).queryByText("Présence")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "GRIDD" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "GRIDD" })).not.toBeInTheDocument();
+  });
+
+  it("affiche météo extérieure et prévision de l'espace sans météo H+1", async () => {
+    dashboardApi((request) =>
+      request.path === "/api/weather/latest/" ? { body: weatherSnapshot() } : undefined,
+    );
+    renderApp("/spaces");
+    const card = (await screen.findByRole("heading", { name: "Salle de réunion" })).closest("article")!;
+    expect(await within(card).findByRole("region", { name: "Météo extérieure" })).toBeInTheDocument();
+    expect(within(card).getByText("Température actuelle")).toBeInTheDocument();
+    expect(within(card).getByText("Humidité actuelle")).toBeInTheDocument();
+    expect(within(card).getByText("19,2 °C")).toBeInTheDocument();
+    expect(within(card).getByText("55,4 %")).toBeInTheDocument();
+    expect(within(card).queryByText(/Open-Meteo|Référence météo H\+1/)).not.toBeInTheDocument();
+    expect(within(card).getByText("Prévision intérieure")).toBeInTheDocument();
+    expect(within(card).getByText("Température prévue")).toBeInTheDocument();
+    expect(within(card).getByText("Humidité prévue")).toBeInTheDocument();
+    expect(within(card).getAllByText("Indisponible").length).toBeGreaterThan(0);
+  });
+
+  it("n'affiche pas l'occupation dans un espace même si l'API la renvoie", async () => {
+    const zone = { ...zones[0], metrics: [...zones[0].metrics, "occupancy" as const] };
+    dashboardApi(undefined, { zones: [zone] });
+    renderApp("/spaces");
+    const card = (await screen.findByRole("heading", { name: "Salle de réunion" })).closest("article")!;
+    expect(within(card).queryByText("Présence")).not.toBeInTheDocument();
+    expect(within(card).queryByText("Occupation")).not.toBeInTheDocument();
   });
 
   it("navigue entre les vues depuis la barre principale", async () => {
@@ -63,16 +93,17 @@ describe("routes et vues principales", () => {
 describe("données du tableau de bord par WebSocket", () => {
   const DASHBOARD_PATHS = ["/api/zones/", "/api/observations/latest/", "/api/alerts/"];
 
-  it("charge zones, mesures et alertes sans aucune requête HTTP", async () => {
+  it("reçoit les données du tableau de bord par WebSocket et charge les prédictions par REST", async () => {
     const { requests } = dashboardApi(undefined, {
       alerts: { active: [alert()], history: [alert({ id: 2, active: false, resolution: "returned_to_normal" })] },
     });
     const user = userEvent.setup();
     renderApp("/");
-    await waitFor(() => expect(screen.getByText("22,4 °C")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("22,4 °C").length).toBeGreaterThan(0));
     await user.click(screen.getByRole("link", { name: /Alertes/ }));
     expect(await screen.findByText("Retour à la normale")).toBeInTheDocument();
     expect(requests.filter((request) => DASHBOARD_PATHS.includes(request.path))).toEqual([]);
+    expect(requests.filter((request) => request.path === "/api/climate-predictions/latest/")).toHaveLength(1);
   });
 
   it("applique les alertes et les mesures poussées par le serveur", async () => {
@@ -87,19 +118,164 @@ describe("données du tableau de bord par WebSocket", () => {
       event: "observation.created",
       data: { ...realtime.state.latest[0], id: 99, value: 24.8, observed_at: new Date().toISOString() },
     });
+
     await userEvent.setup().click(screen.getByRole("link", { name: /Vue d’ensemble|Vue d'ensemble/ }));
-    await waitFor(() => expect(screen.getByText("24,8 °C")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("24,8 °C").length).toBeGreaterThan(0));
     expect(requests.filter((request) => DASHBOARD_PATHS.includes(request.path))).toEqual([]);
+  });
+
+  it("met à jour le widget météo via le WebSocket après le chargement", async () => {
+    const { realtime } = dashboardApi();
+    renderApp("/spaces");
+    const card = (await screen.findByRole("heading", { name: "Salle de réunion" })).closest("article")!;
+    const weather = within(card).getByRole("region", { name: "Météo extérieure" });
+    expect(await within(weather).findByText("Indisponible")).toBeInTheDocument();
+    realtime.push({ event: "weather_snapshot.created", data: weatherSnapshot() });
+    expect(await within(card).findByText("19,2 °C")).toBeInTheDocument();
+    expect(within(card).getByText("55,4 %")).toBeInTheDocument();
+    expect(within(card).queryByText("20,1 °C")).not.toBeInTheDocument();
   });
 
   it("le bouton Rafraîchir redemande l'instantané par le WebSocket", async () => {
     const { realtime, requests } = dashboardApi();
     const user = userEvent.setup();
     renderApp("/");
-    await screen.findByText("22,4 °C");
+    await screen.findAllByText("22,4 °C");
     await user.click(screen.getByRole("button", { name: "Rafraîchir" }));
     expect(realtime.received).toContainEqual({ action: "snapshot" });
-    expect(requests).toEqual([]);
+    await waitFor(() =>
+      expect(requests.filter((request) => request.path === "/api/climate-predictions/latest/")).toHaveLength(2),
+    );
+  });
+
+  it("affiche mesures réelles et prédictions séparément, puis applique la mise à jour de la zone", async () => {
+    const prediction = climatePrediction();
+    const humidity = {
+      ...observations[0],
+      id: 12,
+      type: "humidity" as const,
+      value: 45.2,
+      unit: "%",
+    };
+    const otherZone = { ...zones[0], id: 3, name: "Bureau des professeurs", code: "professors-office" };
+    let response = [prediction];
+    const { realtime } = dashboardApi(
+      (request) =>
+        request.path === "/api/climate-predictions/latest/"
+          ? { body: response }
+          : request.path === "/api/weather/latest/"
+            ? { body: weatherSnapshot() }
+            : undefined,
+      { zones: [...zones, otherZone], latest: [...observations, humidity] },
+    );
+    renderApp("/");
+    const section = screen.getByRole("region", { name: "Mesures et prévisions" });
+    expect(await within(section).findByText("23,8 °C")).toBeInTheDocument();
+    expect(within(section).getByText("22,4 °C")).toBeInTheDocument();
+    expect(within(section).getByText("45,2 %")).toBeInTheDocument();
+    expect(within(section).getByText("48,2 %")).toBeInTheDocument();
+    expect(within(section).getByText("Météo extérieure")).toBeInTheDocument();
+    expect(within(section).getByText("19,2 °C")).toBeInTheDocument();
+    expect(within(section).getByText("55,4 %")).toBeInTheDocument();
+    expect(within(section).getByText(/Prévue pour/)).toBeInTheDocument();
+
+    await userEvent.setup().selectOptions(
+      within(section).getByLabelText("Espace pour les prévisions"),
+      "professors-office",
+    );
+    response = [
+      climatePrediction({
+        prediction_id: 18,
+        prediction_event_id: "664c8b13-c0f1-4ca0-9e83-0b427d4e5cf7",
+        zone_code: "professors-office",
+        predicted_temperature_c: 24.1,
+        prediction_mode: "operational",
+        model_version: "office-model-v2",
+      }),
+    ];
+    realtime.push({
+      event: "climate_prediction.created",
+      data: response[0],
+    });
+    expect(await within(section).findByText("24,1 °C")).toBeInTheDocument();
+    expect(within(section).getByRole("heading", { name: "Bureau des professeurs" })).toBeInTheDocument();
+  });
+
+  it("signale l'absence et l'expiration sans inventer de valeurs", async () => {
+    const { realtime } = dashboardApi((request) =>
+      request.path === "/api/climate-predictions/latest/"
+        ? {
+            body: [
+              climatePrediction({
+                generated_at: new Date(Date.now() - 120_000).toISOString(),
+                target_at: new Date(Date.now() - 60_000).toISOString(),
+              }),
+            ],
+          }
+        : undefined,
+    );
+    renderApp("/");
+    const section = screen.getByRole("region", { name: "Mesures et prévisions" });
+    expect(await within(section).findByText("Indisponible")).toBeInTheDocument();
+    expect(within(section).queryByText("23,8 °C")).not.toBeInTheDocument();
+    realtime.push({ event: "climate_prediction.created", data: { zone_code: "meeting-room" } });
+    expect(await within(section).findByText("Prévision indisponible.")).toBeInTheDocument();
+  });
+
+  it("affiche l'absence de prédictions disponibles", async () => {
+    dashboardApi();
+    renderApp("/");
+    const section = screen.getByRole("region", { name: "Mesures et prévisions" });
+    expect(await within(section).findByText("Température prévue")).toBeInTheDocument();
+    const predictedTemperature = within(section).getByText("Température prévue").closest("article")!;
+    const predictedHumidity = within(section).getByText("Humidité prévue").closest("article")!;
+    expect(within(predictedTemperature).getByText("—")).toBeInTheDocument();
+    expect(within(predictedHumidity).getByText("—")).toBeInTheDocument();
+    expect(within(predictedTemperature).getByText("Indisponible")).toBeInTheDocument();
+    expect(within(predictedHumidity).getByText("Indisponible")).toBeInTheDocument();
+  });
+
+  it("recharge les prédictions et signale la coupure lors d'une reconnexion WebSocket", async () => {
+    let predictions = [climatePrediction()];
+    const { requests, realtime } = dashboardApi((request) =>
+      request.path === "/api/climate-predictions/latest/" ? { body: predictions } : undefined,
+    );
+    renderApp("/");
+    const section = screen.getByRole("region", { name: "Mesures et prévisions" });
+    expect(await within(section).findByText("23,8 °C")).toBeInTheDocument();
+    expect(requests.filter((request) => request.path === "/api/climate-predictions/latest/")).toHaveLength(1);
+
+    predictions = [
+      climatePrediction({
+        prediction_id: 18,
+        prediction_event_id: "664c8b13-c0f1-4ca0-9e83-0b427d4e5cf7",
+        generated_at: new Date(Date.now() + 60_000).toISOString(),
+        predicted_temperature_c: 24.2,
+      }),
+    ];
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        realtime.disconnect();
+        await Promise.resolve();
+      });
+      expect(
+        within(section).getByText(
+          "Connexion interrompue.",
+        ),
+      ).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(REALTIME_RECONNECT_MS);
+        realtime.openLatest();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await waitFor(() =>
+      expect(requests.filter((request) => request.path === "/api/climate-predictions/latest/")).toHaveLength(2),
+    );
+    expect(await within(section).findByText("24,2 °C")).toBeInTheDocument();
   });
 });
 

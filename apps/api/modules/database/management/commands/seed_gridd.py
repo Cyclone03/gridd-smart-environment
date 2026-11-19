@@ -22,8 +22,14 @@ class Command(BaseCommand):
         ("humidity", "%"),
         ("co2", "ppm"),
         ("sound_level", "dBA"),
-        ("occupancy", "count"),
     ]
+
+    SENSORS_BY_ZONE = {
+        "server-equipment-room": [
+            ("temperature", "°C"),
+            ("humidity", "%"),
+        ],
+    }
 
     # Créées seulement si aucune règle n'existe. Valeurs illustratives.
     DEMO_RULES = [
@@ -44,8 +50,22 @@ class Command(BaseCommand):
             if not profile.enabled:
                 profile.enabled = True
                 profile.save(update_fields=["enabled"])
-            for sensor_type, unit in self.SENSORS:
+            sensors = self.SENSORS_BY_ZONE.get(code, self.SENSORS)
+            for sensor_type, unit in sensors:
                 self._seed_sensor(zone, name, sensor_type, unit)
+            configured_types = {sensor_type for sensor_type, _ in sensors}
+            for sensor_type, _ in self.SENSORS:
+                if sensor_type not in configured_types:
+                    Sensor.objects.filter(
+                        zone=zone,
+                        node_id=f"{code}-{sensor_type}",
+                        sensor_type=sensor_type,
+                    ).update(active=False)
+            Sensor.objects.filter(
+                zone=zone,
+                node_id=f"{code}-occupancy",
+                sensor_type="occupancy",
+            ).update(active=False)
 
         if not AlarmRule.objects.exists():
             for rule in self.DEMO_RULES:

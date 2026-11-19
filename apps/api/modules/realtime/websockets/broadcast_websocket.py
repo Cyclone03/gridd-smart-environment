@@ -8,6 +8,7 @@ class BroadcastWebSocket(AsyncJsonWebsocketConsumer):
     - ``{"event": "realtime.connected"}`` à l'ouverture ;
     - ``{"event": "observation.created", "data": {...}}`` pour une mesure, ou
       ``{"event": "observations.created", "data": [...]}`` pour un lot ;
+    - ``{"event": "climate_prediction.created", "data": {...}}`` pour une prédiction ;
     - ``{"event": "alerts.changed", "data": {"active": [...], "history": [...]}}``
       lorsqu'une alerte est créée, résolue ou modifiée ;
     - ``{"event": "zones.changed", "data": [...]}`` lorsque la liste des zones change.
@@ -31,6 +32,12 @@ class BroadcastWebSocket(AsyncJsonWebsocketConsumer):
 
     async def observations_created(self, event):
         await self.send_json({"event": "observations.created", "data": event["payload"]})
+
+    async def climate_prediction_created(self, event):
+        await self.send_json({"event": "climate_prediction.created", "data": event["payload"]})
+
+    async def weather_snapshot_created(self, event):
+        await self.send_json({"event": "weather_snapshot.created", "data": event["payload"]})
 
     async def receive_json(self, content, **kwargs):
         if isinstance(content, dict) and content.get("action") == "ping":

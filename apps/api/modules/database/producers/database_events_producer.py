@@ -14,6 +14,20 @@ class DatabaseEventsProducer:
     def observation_persisted(self, payload):
         self._publish(EventTypes.OBSERVATION_PERSISTED, payload, key=payload["zone_code"])
 
+    def climate_prediction_persisted(self, payload):
+        self._publish(
+            EventTypes.CLIMATE_PREDICTION_PERSISTED,
+            payload,
+            key=payload["zone_code"],
+        )
+
+    def weather_snapshot_persisted(self, payload):
+        self._publish(
+            EventTypes.WEATHER_SNAPSHOT_PERSISTED,
+            payload,
+            key="weather",
+        )
+
     def alerts_changed(self, zone_code=None):
         self._publish(EventTypes.ALERTS_CHANGED, {"zone_code": zone_code}, key=zone_code)
 

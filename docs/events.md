@@ -12,8 +12,11 @@ Tous les noms de topics sont configurables (voir `apps/api/.env.example`).
 | `gridd.backend.alarms.commands` | `alarms` (API) | `database` | `rule:<id>` |
 | `gridd.backend.database.events` | `database` | `alarms`, `realtime` | zone ou `rule:<id>` |
 | `gridd.backend.database.replies` | `database` | émetteur de la commande | `correlation_id` |
+| `gridd.backend.ai_prediction.events` | `ai_prediction_service` | `database` | zone ou `weather` |
 
-Les topics lus par `database` sont fixés par `DATABASE_SUBSCRIBED_TOPICS`.
+Par défaut, `database` lit aussi `gridd.backend.ai_prediction.events`.
+`DATABASE_SUBSCRIBED_TOPICS`, lorsqu'il est défini, remplace la liste par défaut
+et doit donc inclure ce topic pour activer la persistance des prédictions.
 `run_consumers` crée les topics internes manquants si
 `KAFKA_AUTO_CREATE_TOPICS=true` (`KAFKA_TOPIC_PARTITIONS`,
 `KAFKA_TOPIC_REPLICATION_FACTOR`).
@@ -96,18 +99,91 @@ Réponses sur `database.replies` :
 - `command.succeeded` : `{"data": {…}}` ;
 - `command.failed` : `{"error": {"code": "not_found | invalid | error", "message": "…", "errors": {"champ": ["…"]}}}`.
 
+### `ai_prediction_service` → `database`
+
+Topic : `gridd.backend.ai_prediction.events`.
+
+**`climate_prediction.generated`** utilise la même enveloppe que les autres
+événements internes. `occurred_at` est l'instant de génération; `generated_at`
+dans le payload le répète explicitement. Les deux horodatages sont UTC.
+
+```json
+{
+  "type": "climate_prediction.generated",
+  "payload": {
+    "zone_code": "open-workspace",
+    "generated_at": "2026-11-15T19:00:00+00:00",
+    "target_at": "2026-11-15T20:00:00+00:00",
+    "predicted_temperature_c": 23.5,
+    "predicted_humidity_percent": 45.0,
+    "model_version": "modelZone1:sha256:…",
+    "prediction_mode": "operational"
+  },
+  "source": "ai_prediction_service",
+  "event_id": "uuid",
+  "occurred_at": "2026-11-15T19:00:00+00:00",
+  "correlation_id": null,
+  "reply_to": null
+}
+```
+
+`prediction_mode` vaut obligatoirement `experimental` ou `operational`.
+Les essais expérimentaux ne doivent pas être publiés sur le Kafka partagé.
+La clé Kafka est `zone_code`; le producteur attend un accusé de livraison.
+`database` valide le contrat, vérifie que la zone existe et est active, puis
+persiste l'événement de façon idempotente via `event_id`. Après insertion, il
+publie `climate_prediction.persisted` sur `database.events`, avec la même clé
+Kafka de zone et `prediction_event_id` pour référencer l'événement source.
+`realtime` valide ce fait puis diffuse `climate_prediction.created` au groupe du
+tableau de bord et au groupe WebSocket de la zone concernée. La persistance et
+la publication Kafka ne forment pas une transaction distribuée : une panne
+après le commit en base peut laisser la prédiction enregistrée sans événement
+reçu par `realtime`; une livraison de bout en bout n'est donc pas garantie.
+
+**`weather_snapshot.generated`** publie les conditions courantes et la prévision
+météo Open-Meteo pour l'heure suivante. Le service peut publier cet événement
+même lorsqu'aucun modèle ne peut être chargé. Le consommateur Database le
+valide et le persiste de façon idempotente via `event_id`, puis publie
+`weather_snapshot.persisted` sur `database.events`. La prévision météo H+1 est
+une référence externe pour l'interface et n'est pas une prédiction intérieure
+ni une entrée du modèle.
+
+```json
+{
+  "type": "weather_snapshot.generated",
+  "payload": {
+    "generated_at": "2026-11-15T18:00:00+00:00",
+    "provider": "open-meteo",
+    "current_at": "2026-11-15T18:00:00+00:00",
+    "current_temperature_c": 18.5,
+    "current_relative_humidity_percent": 55.0,
+    "forecast_h1_at": "2026-11-15T19:00:00+00:00",
+    "forecast_h1_temperature_c": 19.0,
+    "forecast_h1_relative_humidity_percent": 57.0
+  },
+  "source": "ai_prediction_service",
+  "event_id": "uuid",
+  "occurred_at": "2026-11-15T18:00:00+00:00",
+  "correlation_id": null,
+  "reply_to": null
+}
+```
 
 ### `database` → modules
 
 | Type | Contenu | Consommateurs |
 |---|---|---|
 | `observation.persisted` | observation enregistrée (`id`, `zone`, `zone_code`, `zone_name`, `sensor`, `sensor_node_id`, `type`, `value`, `unit`, `observed_at`, `received_at`, `quality_status`, `quality_reason`, `metadata`) | `alarms`, `realtime` |
+| `climate_prediction.persisted` | prédiction enregistrée (`prediction_id`, `prediction_event_id`, `zone_code`, `generated_at`, `target_at`, `predicted_temperature_c`, `predicted_humidity_percent`, `model_version`, `prediction_mode`) | `realtime` |
+| `weather_snapshot.persisted` | instantané Open-Meteo enregistré (`weather_snapshot_id`, `weather_snapshot_event_id`, `generated_at`, températures et humidités actuelles et H+1) | `realtime` |
 | `alerts.changed` | `zone_code` (ou `null`) | `realtime` |
 | `zones.changed` | `zone_code` (ou `null`) — zone créée / renommée, capteur créé, modification dans l'admin | `realtime` |
 | `alarm_rule.changed` | `rule_id`, `action` (`created`, `updated`, `deleted`), `changed_fields`, `enabled`, `severity` | `alarms` |
 
 `observation.persisted` est relayé tel quel aux navigateurs
 (`{"event": "observation.created", "data": …}` sur `/ws/dashboard/`).
+`weather_snapshot.persisted` est relayé sous la forme
+`{"event": "weather_snapshot.created", "data": …}`.
 Pour `alerts.changed` et `zones.changed`, le module `realtime` lit une seule
 fois la nouvelle liste (alertes actives + historique récent, ou zones) et la
 diffuse avec le message : les navigateurs ne refont aucune requête HTTP.

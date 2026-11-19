@@ -42,15 +42,15 @@ const PHYSICS: Record<string, { positive: string; negative: string }> = {
   },
   [pairKey("temperature", "sound_level")]: {
     positive:
-      "Les périodes bruyantes sont aussi les plus chaudes : une même activité (personnes présentes, équipements en marche) produit à la fois du bruit et de la chaleur.",
+      "Le niveau sonore et la température augmentent ensemble sur la période. Cette corrélation décrit une association, pas sa cause.",
     negative:
-      "Le bruit augmente quand la température baisse : cela peut indiquer un système de ventilation ou de climatisation audible qui se met en marche pour refroidir l’espace.",
+      "Le niveau sonore augmente tandis que la température baisse. Cette corrélation décrit une association, pas sa cause.",
   },
   [pairKey("humidity", "sound_level")]: {
     positive:
-      "Bruit et humidité augmentent ensemble : la présence de personnes (conversations et respiration) est l’explication la plus probable.",
+      "Le niveau sonore et l’humidité augmentent ensemble sur la période. Cette corrélation décrit une association, pas sa cause.",
     negative:
-      "Le bruit monte quand l’humidité baisse : la ventilation renouvelle probablement l’air (bruit de soufflage) tout en l’asséchant.",
+      "Le niveau sonore augmente tandis que l’humidité baisse. Cette corrélation décrit une association, pas sa cause.",
   },
 };
 
@@ -122,7 +122,7 @@ export function synthesis(pairs: PairResult[], available: CorrelationMetric[]) {
     );
   if (th && direct(th) && th.r! > 0)
     items.push(
-      "Chaleur et humidité augmentent ensemble : vérifier le renouvellement d’air, surtout lors des périodes de forte présence.",
+      "Chaleur et humidité augmentent ensemble. Cette association ne permet pas d’en identifier la cause.",
     );
 
   const ts = get("temperature", "sound_level");
@@ -131,11 +131,11 @@ export function synthesis(pairs: PairResult[], available: CorrelationMetric[]) {
   const hsPos = direct(hs) && hs!.r! > 0;
   if (tsPos && hsPos)
     items.push(
-      "Le niveau sonore évolue avec la température et l’humidité : l’occupation de l’espace est très probablement le facteur commun. Augmenter la ventilation pendant les périodes d’activité limiterait la hausse de chaleur et d’humidité.",
+      "Le niveau sonore est associé aux variations des mesures climatiques. Les observations ne permettent pas d’en déduire la cause.",
     );
   else if (tsPos || hsPos)
     items.push(
-      "Le bruit, indicateur indirect de présence, est lié à au moins une mesure climatique : l’activité humaine influence l’ambiance de cet espace.",
+      "Le niveau sonore est associé à au moins une mesure climatique sur cette période. La corrélation n’établit pas de causalité.",
     );
   if (direct(ts) && ts!.r! < 0)
     items.push(
@@ -143,7 +143,7 @@ export function synthesis(pairs: PairResult[], available: CorrelationMetric[]) {
     );
   if (available.includes("sound_level") && ts && hs && !isMeaningful(ts) && !isMeaningful(hs))
     items.push(
-      "Le niveau sonore n’influence pas le climat de l’espace sur cette période : les sources de bruit sont ponctuelles ou ne correspondent pas à une présence prolongée.",
+      "Le niveau sonore ne présente pas de lien notable avec les mesures climatiques sur cette période.",
     );
 
   valid

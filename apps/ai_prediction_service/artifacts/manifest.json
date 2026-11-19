@@ -1,0 +1,383 @@
+{
+  "contract": {
+    "confirmation_source": "Official confirmation from Karina relayed by the project owner on 2026-11-15",
+    "dependencies_versions_confirmed": false,
+    "horizon_h1_confirmed": false,
+    "input_features": [
+      "indoor_temperature",
+      "indoor_humidity",
+      "outdoor_temperature",
+      "outdoor_humidity"
+    ],
+    "input_order_status": "confirmed_by_Karina",
+    "input_units": [
+      "degC",
+      "percent",
+      "degC",
+      "percent"
+    ],
+    "output_features": [
+      "indoor_temperature",
+      "indoor_humidity"
+    ],
+    "output_order_status": "confirmed_by_Karina",
+    "output_units": [
+      "degC",
+      "percent"
+    ],
+    "input_shape": [
+      null,
+      4,
+      1
+    ],
+    "training_reshape_confirmed": false,
+    "zone_mapping_status": "confirmed_by_Karina",
+    "zone_model_mapping": {
+      "1": "open-workspace",
+      "2": "server-equipment-room",
+      "3": "professors-office",
+      "4": "individual-work-cubicle-01",
+      "5": "meeting-room",
+      "6": "individual-work-cubicle-02"
+    },
+    "output_shape": [
+      null,
+      2
+    ],
+    "status": "features_and_zone_mapping_confirmed"
+  },
+  "dependencies": {
+    "joblib_version": null,
+    "keras_metadata_version": "3.15.1",
+    "python_training_version": null,
+    "scikit_learn_metadata_version": "1.9.1",
+    "tensorflow_version": null
+  },
+  "schema_version": 2,
+  "source": {
+    "commit": "5457886da2f19826e5e75ce0fcb95eeb09629b0e",
+    "notebooks": {
+      "corrected_copy": {
+        "git_blob": "ae5a7f3d62438acc9c20e06fba2cb493884d579f",
+        "sha256": "31e7cda381caaa68d613f700cef4c7fbe06dcaeb4823d334bc17696bd292e93e",
+        "size_bytes": 445536,
+        "source_path": "apps/api/collect_-_Copie.ipynb"
+      },
+      "historical": {
+        "git_blob": "26c13f35d55605797f1715434bb5e6bc2a7cf24b",
+        "sha256": "9039cc79de054d695841a52dc2996c312529d5b17b5c7fc37490a82a673497f2",
+        "size_bytes": 240705,
+        "source_path": "apps/api/ModelDL.ipynb"
+      }
+    },
+    "ref": "refs/remotes/gitlab/deploiment",
+    "remote": "gitlab"
+  },
+  "trust": {
+    "joblib_deserialization_approved": false,
+    "note": "No joblib file has been deserialized; require independent provenance approval and an isolated environment.",
+    "provenance_status": "not_cryptographically_verified"
+  },
+  "zones": {
+    "1": {
+      "files": {
+        "model": {
+          "git_blob": "631404796b1bd789b92a883d9161b6683bfb2d1e",
+          "path": "zone1/modelZone1.h5",
+          "sha256": "a788939c9c5fb1f6bfb176b4ced620c4f82e4304ce95e6ce8a6ac4527116404c",
+          "size_bytes": 40792,
+          "source_path": "apps/api/modelZone1.h5"
+        },
+        "scaler_x": {
+          "git_blob": "220bef71fba14715baad1f2cf00a69fa8bc3e599",
+          "path": "zone1/scalerX_zone1.joblib",
+          "sha256": "db3c08a9a59b186f9417d381345ada847785ee64575d00a0a749bdf2f6edd7a4",
+          "size_bytes": 823,
+          "source_path": "apps/api/scalerX_zone1.joblib",
+          "static_metadata": {
+            "class": "sklearn.preprocessing.MinMaxScaler",
+            "deserialized": false,
+            "feature_range": [
+              0,
+              1
+            ],
+            "n_features_in": 4,
+            "n_samples_seen": 111,
+            "scikit_learn_version": "1.9.1"
+          }
+        },
+        "scaler_y": {
+          "git_blob": "3f3eda6afca989faa5597db7b0c8c6ee304dd07c",
+          "path": "zone1/scalerY_zone1.joblib",
+          "sha256": "b4b2fccadab8ee888d8c6071f33640a54b0b9888e522f2b93f119e20d137d789",
+          "size_bytes": 743,
+          "source_path": "apps/api/scalerY_zone1.joblib",
+          "static_metadata": {
+            "class": "sklearn.preprocessing.MinMaxScaler",
+            "deserialized": false,
+            "feature_range": [
+              0,
+              1
+            ],
+            "n_features_in": 2,
+            "n_samples_seen": 111,
+            "scikit_learn_version": "1.9.1"
+          }
+        }
+      },
+      "previous_local_model_sha256": "b14dc5f341bb05993f4bb2415b453213fec7d7ec103100f7db5db686e572adf1",
+      "zone_code": "open-workspace",
+      "zone_code_mapping_status": "confirmed_by_Karina"
+    },
+    "2": {
+      "files": {
+        "model": {
+          "git_blob": "0ea10aa64f99acaef1bd0f84e013c4a419cfd532",
+          "path": "zone2/modelZone2.h5",
+          "sha256": "ea93d1cfe3391beb7f3ca9ab7030a782c50008100897d30ca3c3f3de296a4c4e",
+          "size_bytes": 40792,
+          "source_path": "apps/api/modelZone2.h5"
+        },
+        "scaler_x": {
+          "git_blob": "a4a24e13f4e29ffc279a37617089cfff3f194919",
+          "path": "zone2/scalerX_zone2.joblib",
+          "sha256": "8153fb67c50249cd0009def936309d00599d0ec165487231eb2e986bdc3247cc",
+          "size_bytes": 823,
+          "source_path": "apps/api/scalerX_zone2.joblib",
+          "static_metadata": {
+            "class": "sklearn.preprocessing.MinMaxScaler",
+            "deserialized": false,
+            "feature_range": [
+              0,
+              1
+            ],
+            "n_features_in": 4,
+            "n_samples_seen": 111,
+            "scikit_learn_version": "1.9.1"
+          }
+        },
+        "scaler_y": {
+          "git_blob": "9e7241d3d7ef1ce843906a6a3f3d8a4bd2536017",
+          "path": "zone2/scalerY_zone2.joblib",
+          "sha256": "c9bed269d5b4b21d08adcb1342b223846345805f6b3552112685a3d3d75d15de",
+          "size_bytes": 743,
+          "source_path": "apps/api/scalerY_zone2.joblib",
+          "static_metadata": {
+            "class": "sklearn.preprocessing.MinMaxScaler",
+            "deserialized": false,
+            "feature_range": [
+              0,
+              1
+            ],
+            "n_features_in": 2,
+            "n_samples_seen": 111,
+            "scikit_learn_version": "1.9.1"
+          }
+        }
+      },
+      "previous_local_model_sha256": "0a0b19af4ac3f86aa9ac26432deaf3ad8b3147715584d125072161b423f630df",
+      "zone_code": "server-equipment-room",
+      "zone_code_mapping_status": "confirmed_by_Karina"
+    },
+    "3": {
+      "files": {
+        "model": {
+          "git_blob": "0fefcb50870a259f614f22aefdcec8f1a398c71b",
+          "path": "zone3/modelZone3.h5",
+          "sha256": "9434efad18b0c7fefc06f27661a86d04387db91a1ed6b2116a6fdcb0aff5a62c",
+          "size_bytes": 24248,
+          "source_path": "apps/api/modelZone3.h5"
+        },
+        "scaler_x": {
+          "git_blob": "a740663e08e631014d845072419b168f095247c0",
+          "path": "zone3/scalerX_zone3.joblib",
+          "sha256": "69736009ce73e43201eec3432b4cf051acaef58d3a2c1bcb9c0d934cbdcf8b7e",
+          "size_bytes": 823,
+          "source_path": "apps/api/scalerX_zone3.joblib",
+          "static_metadata": {
+            "class": "sklearn.preprocessing.MinMaxScaler",
+            "deserialized": false,
+            "feature_range": [
+              0,
+              1
+            ],
+            "n_features_in": 4,
+            "n_samples_seen": 111,
+            "scikit_learn_version": "1.9.1"
+          }
+        },
+        "scaler_y": {
+          "git_blob": "420fceff9278d4e73405ab49fb9145e46af2f69e",
+          "path": "zone3/scalerY_zone3.joblib",
+          "sha256": "28f47b362bcb456560df57995aace1b2eeb5f165a60840c43847b8e67283afb7",
+          "size_bytes": 743,
+          "source_path": "apps/api/scalerY_zone3.joblib",
+          "static_metadata": {
+            "class": "sklearn.preprocessing.MinMaxScaler",
+            "deserialized": false,
+            "feature_range": [
+              0,
+              1
+            ],
+            "n_features_in": 2,
+            "n_samples_seen": 111,
+            "scikit_learn_version": "1.9.1"
+          }
+        }
+      },
+      "previous_local_model_sha256": "caf84fb7e0cc67a8096685c2740b883f485d8829ee324852c018fccd64f8c294",
+      "zone_code": "professors-office",
+      "zone_code_mapping_status": "confirmed_by_Karina"
+    },
+    "4": {
+      "files": {
+        "model": {
+          "git_blob": "5c7098368cfaac5d3bc2e887569c56f4f876462d",
+          "path": "zone4/modelZone4.h5",
+          "sha256": "70860f4c7536279e512b838d420b2dafba7aeed6dbc63a2b4dba869afe9545e0",
+          "size_bytes": 24248,
+          "source_path": "apps/api/modelZone4.h5"
+        },
+        "scaler_x": {
+          "git_blob": "9979744128ad004c3b48306e7c03321d7f5b9147",
+          "path": "zone4/scalerX_zone4.joblib",
+          "sha256": "55873384dd0887183aaae9ae7e44a6bd91e28d1f6bdb72224923f20052b452eb",
+          "size_bytes": 823,
+          "source_path": "apps/api/scalerX_zone4.joblib",
+          "static_metadata": {
+            "class": "sklearn.preprocessing.MinMaxScaler",
+            "deserialized": false,
+            "feature_range": [
+              0,
+              1
+            ],
+            "n_features_in": 4,
+            "n_samples_seen": 111,
+            "scikit_learn_version": "1.9.1"
+          }
+        },
+        "scaler_y": {
+          "git_blob": "37389d7910b516366c53979091ce44361702eb09",
+          "path": "zone4/scalerY_zone4.joblib",
+          "sha256": "f0360d9b34cd4244d47e40d10d133f18c8b0c5d2cf963c4e38b0dc24e1d1a1ce",
+          "size_bytes": 743,
+          "source_path": "apps/api/scalerY_zone4.joblib",
+          "static_metadata": {
+            "class": "sklearn.preprocessing.MinMaxScaler",
+            "deserialized": false,
+            "feature_range": [
+              0,
+              1
+            ],
+            "n_features_in": 2,
+            "n_samples_seen": 111,
+            "scikit_learn_version": "1.9.1"
+          }
+        }
+      },
+      "previous_local_model_sha256": "ce071e728da8038e83fb30b28a5c4a20dc275ffa75d6fb0885d8944f6da77a49",
+      "zone_code": "individual-work-cubicle-01",
+      "zone_code_mapping_status": "confirmed_by_Karina"
+    },
+    "5": {
+      "files": {
+        "model": {
+          "git_blob": "c81c4c224385a4334f574c853ccae3e34951dab8",
+          "path": "zone5/modelZone5.h5",
+          "sha256": "3642a0348bb30b59bac980aed3f4aae52fcd7b9ab1e3c5f982c22471b7641752",
+          "size_bytes": 40792,
+          "source_path": "apps/api/modelZone5.h5"
+        },
+        "scaler_x": {
+          "git_blob": "5e9627eba8a1f81047c8ccc68160e1af878b8274",
+          "path": "zone5/scalerX_zone5.joblib",
+          "sha256": "891f2f1cded2c19e1c9dd8b53c41d124df5c33b0fbc10097e186cb1d193ee841",
+          "size_bytes": 823,
+          "source_path": "apps/api/scalerX_zone5.joblib",
+          "static_metadata": {
+            "class": "sklearn.preprocessing.MinMaxScaler",
+            "deserialized": false,
+            "feature_range": [
+              0,
+              1
+            ],
+            "n_features_in": 4,
+            "n_samples_seen": 66,
+            "scikit_learn_version": "1.9.1"
+          }
+        },
+        "scaler_y": {
+          "git_blob": "f43484fc3a0c8b9cce62b545e882ace2ceba617b",
+          "path": "zone5/scalerY_zone5.joblib",
+          "sha256": "57ff3e244ecdbf604a19fdc3bb56e37b03db2ace54fd9443d08a988dce340a0b",
+          "size_bytes": 743,
+          "source_path": "apps/api/scalerY_zone5.joblib",
+          "static_metadata": {
+            "class": "sklearn.preprocessing.MinMaxScaler",
+            "deserialized": false,
+            "feature_range": [
+              0,
+              1
+            ],
+            "n_features_in": 2,
+            "n_samples_seen": 66,
+            "scikit_learn_version": "1.9.1"
+          }
+        }
+      },
+      "previous_local_model_sha256": "83084aaceb2bb97117a07c161beb80476992a7477245377b3eee87f35085d1cc",
+      "zone_code": "meeting-room",
+      "zone_code_mapping_status": "confirmed_by_Karina"
+    },
+    "6": {
+      "files": {
+        "model": {
+          "git_blob": "b0be4a9716e9b4056692efc61828cc114d0064db",
+          "path": "zone6/modelZone6.h5",
+          "sha256": "3c91ae63ab7d09ee7f3cbbea17e8f1c24294b106ffe3eabeb82061c52f4447c6",
+          "size_bytes": 40792,
+          "source_path": "apps/api/modelZone6.h5"
+        },
+        "scaler_x": {
+          "git_blob": "424826d7811e8afb9b9e9a0b0066f32e9a114382",
+          "path": "zone6/scalerX_zone6.joblib",
+          "sha256": "4b8531b1e057b3c11d2cae9ff424e9ef8c0be770eef63e2032ba26d3598ba596",
+          "size_bytes": 823,
+          "source_path": "apps/api/scalerX_zone6.joblib",
+          "static_metadata": {
+            "class": "sklearn.preprocessing.MinMaxScaler",
+            "deserialized": false,
+            "feature_range": [
+              0,
+              1
+            ],
+            "n_features_in": 4,
+            "n_samples_seen": 66,
+            "scikit_learn_version": "1.9.1"
+          }
+        },
+        "scaler_y": {
+          "git_blob": "9ad804a913420bfcc0b9ebb7a208e8b2697b2eaf",
+          "path": "zone6/scalerY_zone6.joblib",
+          "sha256": "00ebd9a965cf42a6a056508ff5f36fa9b49237f5194d2ef1f25f9a0a8fcf1448",
+          "size_bytes": 743,
+          "source_path": "apps/api/scalerY_zone6.joblib",
+          "static_metadata": {
+            "class": "sklearn.preprocessing.MinMaxScaler",
+            "deserialized": false,
+            "feature_range": [
+              0,
+              1
+            ],
+            "n_features_in": 2,
+            "n_samples_seen": 66,
+            "scikit_learn_version": "1.9.1"
+          }
+        }
+      },
+      "previous_local_model_sha256": "487d27fecb2d9f9221a3a14101f7f5665832c077cd683d9901ab3bc58dfdc574",
+      "zone_code": "individual-work-cubicle-02",
+      "zone_code_mapping_status": "confirmed_by_Karina"
+    }
+  }
+}

@@ -24,6 +24,20 @@ class RealtimeBroadcaster:
             {"type": "observation.created", "payload": payload},
         )
 
+    def climate_prediction_created(self, payload):
+        """Diffuse la prédiction au tableau de bord et à sa seule zone."""
+        self._send(
+            [RealtimeGroups.DASHBOARD, RealtimeGroups.zone(payload["zone_code"])],
+            {"type": "climate_prediction.created", "payload": payload},
+        )
+
+    def weather_snapshot_created(self, payload):
+        """Diffuse l'instantané météo commun à tous les espaces."""
+        self._send(
+            [RealtimeGroups.DASHBOARD],
+            {"type": "weather_snapshot.created", "payload": payload},
+        )
+
     def observations_created(self, payloads):
         """Un seul message par groupe pour un lot de mesures (au lieu d'un par mesure)."""
         if not payloads:

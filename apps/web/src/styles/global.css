@@ -424,6 +424,60 @@ button {
   gap: 9px;
   margin-top: 15px;
 }
+.zone-climate {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.outdoor-weather,
+.zone-prediction {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid #e1e8e6;
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+.outdoor-weather h3,
+.outdoor-weather h4,
+.zone-prediction h4 {
+  margin: 0 0 8px;
+  color: #43514d;
+  font-size: 11px;
+}
+.outdoor-weather-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.outdoor-weather-values p,
+.zone-prediction-values p {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+.outdoor-weather-values p span,
+.zone-prediction-values p span,
+.outdoor-weather > small,
+.outdoor-weather > p,
+.zone-prediction > small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.outdoor-weather-values p strong,
+.zone-prediction-values p strong {
+  font-size: 13px;
+}
+.outdoor-weather > small,
+.zone-prediction > small {
+  display: block;
+  margin-top: 7px;
+}
+.zone-prediction-values {
+  display: grid;
+  gap: 8px;
+}
 .metric-tile {
   min-height: 67px;
   display: flex;
@@ -1036,6 +1090,9 @@ button {
     padding: 15px;
   }
   .zone-metrics {
+    grid-template-columns: 1fr;
+  }
+  .zone-climate {
     grid-template-columns: 1fr;
   }
   .zone-card-foot {

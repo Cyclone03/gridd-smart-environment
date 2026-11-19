@@ -7,6 +7,10 @@ class EventTypes:
     # ingestion → database (topic ingestion.observations)
     OBSERVATION_VALIDATED = "observation.validated"
 
+    # ai_prediction_service → database (topic ai_prediction.events)
+    CLIMATE_PREDICTION_GENERATED = "climate_prediction.generated"
+    WEATHER_SNAPSHOT_GENERATED = "weather_snapshot.generated"
+
     # alarms → database (topic alarms.events)
     ALERT_RAISED = "alert.raised"
     ALERT_RESOLVED = "alert.resolved"
@@ -21,6 +25,8 @@ class EventTypes:
 
     # database → modules (topic database.events) : faits persistés
     OBSERVATION_PERSISTED = "observation.persisted"
+    CLIMATE_PREDICTION_PERSISTED = "climate_prediction.persisted"
+    WEATHER_SNAPSHOT_PERSISTED = "weather_snapshot.persisted"
     ALERTS_CHANGED = "alerts.changed"
     ZONES_CHANGED = "zones.changed"
     ALARM_RULE_CHANGED = "alarm_rule.changed"
