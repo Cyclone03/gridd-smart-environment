@@ -7,36 +7,16 @@ services:
     init: true
     restart: unless-stopped
     stop_grace_period: 2m
-    environment:
-      AI_ARTIFACT_MANIFEST_PATH: /app/artifacts/manifest.json
-      AI_APPROVED_SCALER_SHA256: ${AI_APPROVED_SCALER_SHA256:?Provide the 12 approved scaler SHA-256 values}
-      AI_ISOLATED_ENVIRONMENT: ${AI_ISOLATED_ENVIRONMENT:?Explicitly confirm the isolated artifact-loading environment}
-      AI_PREDICTION_INTERVAL_SECONDS: ${AI_PREDICTION_INTERVAL_SECONDS:-3600}
-      AI_PREDICTION_HEARTBEAT_INTERVAL_SECONDS: ${AI_PREDICTION_HEARTBEAT_INTERVAL_SECONDS:-30}
-      AI_PREDICTION_HEARTBEAT_MAX_AGE_SECONDS: ${AI_PREDICTION_HEARTBEAT_MAX_AGE_SECONDS:-180}
-      AI_PREDICTION_HEARTBEAT_PATH: /var/lib/ai-predictions/heartbeat
-      AI_PREDICTION_LEDGER_PATH: /var/lib/ai-predictions/predictions.sqlite3
-      GRIDD_API_BASE_URL: ${GRIDD_API_BASE_URL:?Set the Django API base URL}
-      OPEN_METEO_LATITUDE: ${OPEN_METEO_LATITUDE:?Set the GRIDD latitude}
-      OPEN_METEO_LONGITUDE: ${OPEN_METEO_LONGITUDE:?Set the GRIDD longitude}
-      HTTP_TIMEOUT_SECONDS: ${HTTP_TIMEOUT_SECONDS:-10}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Set the Kafka bootstrap servers}
-      KAFKA_TOPIC_AI_PREDICTIONS: ${KAFKA_TOPIC_AI_PREDICTIONS:-gridd.backend.ai_prediction.events}
-      KAFKA_SECURITY_PROTOCOL: ${KAFKA_SECURITY_PROTOCOL:-PLAINTEXT}
-      KAFKA_SASL_MECHANISM: ${KAFKA_SASL_MECHANISM:-SCRAM-SHA-256}
-      KAFKA_USERNAME: ${KAFKA_USERNAME:-}
-      KAFKA_PASSWORD: ${KAFKA_PASSWORD:-}
-      KAFKA_CA_CERT_PATH: ${KAFKA_CA_CERT_PATH:-}
-      KAFKA_PUBLISH_TIMEOUT_SECONDS: ${KAFKA_PUBLISH_TIMEOUT_SECONDS:-10}
+    env_file:
+      - .env
     volumes:
       - ai-prediction-state:/var/lib/ai-predictions
     networks:
       - gridd-backend
 
 networks:
-  gridd-backend:
-    external: true
-    name: ${AI_DOCKER_NETWORK:?Set the existing Docker network shared by Django and Kafka}
+    - dokploy-network
+    - default
 
-volumes:
-  ai-prediction-state:
+# volumes:
+#   ai-prediction-state:
