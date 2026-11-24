@@ -3,7 +3,7 @@ from collections.abc import Callable, Set
 from dataclasses import dataclass
 from pathlib import Path
 
-from .artifacts import ArtifactLoader, ArtifactRegistry
+from .artifacts import ArtifactLoader, ArtifactRegistry, ArtifactTrustError
 from .predictor import ModelPredictor
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,11 @@ def load_model_predictor(
                 approved_scaler_sha256=approved_scaler_sha256,
                 isolated_environment=isolated_environment,
             )
+        except ArtifactTrustError as exc:
+            # Configuration attendue tant que l'approbation n'est pas faite :
+            # un message clair suffit, sans trace de pile répétée par zone.
+            logger.error("Model artifacts not trusted for zone %s: %s", zone_code, exc)
+            failures.append(ModelLoadFailure(zone_code, type(exc).__name__, str(exc)))
         except Exception as exc:
             logger.exception("Model artifacts could not be loaded for zone %s.", zone_code)
             failures.append(ModelLoadFailure(zone_code, type(exc).__name__, str(exc)))

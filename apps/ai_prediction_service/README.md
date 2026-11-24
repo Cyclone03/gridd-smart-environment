@@ -105,7 +105,7 @@ AI_ISOLATED_ENVIRONMENT=true
 GRIDD_API_BASE_URL=http://localhost:8000
 OPEN_METEO_LATITUDE=45.5088
 OPEN_METEO_LONGITUDE=-73.5878
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+KAFKA_BOOTSTRAP_SERVERS=localhost:19092
 AI_PREDICTION_LEDGER_PATH=./state/predictions.sqlite3
 ```
 
@@ -201,3 +201,50 @@ $env:AI_ISOLATED_ENVIRONMENT = "true"
 # Définir les autres variables requises depuis la configuration sécurisée.
 docker compose -f apps/ai_prediction_service/docker-compose.yml up --build -d
 ```
+
+## Dépannage
+
+### `ArtifactTrustError: Both scaler SHA-256 values require explicit provenance approval`
+
+Comportement voulu : les scalers `.joblib` sont des pickles, dont la lecture
+peut exécuter du code. Le service refuse de les charger tant que leurs
+empreintes ne figurent pas dans `AI_APPROVED_SCALER_SHA256`. Le message
+indique la zone, les empreintes non approuvées et le nombre d'empreintes
+reçues : `0 approved digest(s) configured` signifie que la variable est vide
+ou absente du conteneur.
+
+Approuver est une décision de confiance, à prendre après revue :
+
+1. vérifier que chaque fichier correspond au manifeste (SHA-256) et au blob Git
+   enregistré (`git hash-object <fichier>` = `git_blob`) ;
+2. confirmer auprès de l'auteur des modèles que le commit source
+   (`source.commit` du manifeste) est bien celui de l'entraînement ;
+3. renseigner les 12 empreintes `scaler_x`/`scaler_y`, par exemple :
+
+```bash
+python -c "import json;m=json.load(open('artifacts/manifest.json'));print(','.join(z['files'][k]['sha256'] for z in m['zones'].values() for k in ('scaler_x','scaler_y')))"
+```
+
+Séparateurs acceptés : virgule, point-virgule, espace ou retour à la ligne ;
+les majuscules (sortie de `Get-FileHash`) et les guillemets sont tolérés. Une
+valeur qui n'est pas une empreinte SHA-256 fait échouer le démarrage avec un
+message explicite. Les modèles `.h5` restent vérifiés par leur SHA-256 à
+chaque chargement.
+
+### `Disconnected: connection closed by peer ... in state APIVERSION_QUERY`
+
+Le broker ferme la connexion dès la première requête Kafka : le client parle
+un protocole que le listener n'attend pas, le plus souvent `PLAINTEXT` (valeur
+par défaut) vers un listener `SSL` ou `SASL_SSL`. Le service journalise au
+démarrage la connexion effective (`Kafka producer configured: bootstrap=…
+security.protocol=…`, sans mot de passe).
+
+- Les prédictions doivent être publiées sur le **bus interne du backend**, celui
+  que lit le service `consumers` de Django : reprendre ses valeurs
+  `KAFKA_BOOTSTRAP_SERVERS` et `KAFKA_SECURITY_PROTOCOL`, et non celles des
+  capteurs (`KAFKA_SENSORS_*`, cluster `kafka.gridd-dt.ca:9096`).
+- Si ce bus est bien un listener `SASL_SSL`, définir
+  `KAFKA_SECURITY_PROTOCOL=SASL_SSL`, `KAFKA_SASL_MECHANISM`,
+  `KAFKA_USERNAME`, `KAFKA_PASSWORD` et `KAFKA_CA_CERT_PATH` (certificat
+  monté en lecture seule), avec un compte autorisé à écrire sur
+  `gridd.backend.ai_prediction.events`.

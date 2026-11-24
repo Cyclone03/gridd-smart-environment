@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from ai_prediction_service.models.artifacts import (
+    parse_approved_scaler_digests,
     ArtifactIntegrityError,
     ArtifactLoader,
     ArtifactManifestError,
@@ -131,9 +132,15 @@ class ArtifactTests(unittest.TestCase):
         self.assertFalse(model_loader.called)
         self.assertFalse(scaler_loader.called)
 
-        with self.assertRaises(ArtifactTrustError):
+        with self.assertRaisesRegex(ArtifactTrustError, f"scaler_x={spec.scaler_x.sha256}"):
             loader.load(spec, isolated_environment=True)
         self.assertFalse(model_loader.called)
+
+        # Une seule empreinte approuvée : l'autre est nommée dans l'erreur.
+        with self.assertRaisesRegex(ArtifactTrustError, f"scaler_y={spec.scaler_y.sha256}") as ctx:
+            loader.load(spec, approved_scaler_sha256={spec.scaler_x.sha256}, isolated_environment=True)
+        self.assertNotIn("scaler_x=", str(ctx.exception))
+        self.assertFalse(scaler_loader.called)
         self.assertFalse(scaler_loader.called)
 
     def test_approved_artifacts_load_with_injected_test_doubles(self):
@@ -168,6 +175,23 @@ class ArtifactTests(unittest.TestCase):
             )
         self.assertFalse(model_loader.called)
         self.assertFalse(scaler_loader.called)
+
+
+class ApprovalParsingTests(unittest.TestCase):
+    DIGEST_A = "a" * 64
+    DIGEST_B = "0123456789abcdef" * 4
+
+    def test_accepts_common_separators_quotes_and_uppercase(self):
+        raw = f' "{self.DIGEST_A.upper()}" ,\n{self.DIGEST_B};  '
+        self.assertEqual(parse_approved_scaler_digests(raw), {self.DIGEST_A, self.DIGEST_B})
+
+    def test_empty_value_means_no_approval(self):
+        self.assertEqual(parse_approved_scaler_digests(""), frozenset())
+        self.assertEqual(parse_approved_scaler_digests(None), frozenset())
+
+    def test_malformed_entry_is_reported(self):
+        with self.assertRaisesRegex(ArtifactTrustError, "not SHA-256 digests: zone1"):
+            parse_approved_scaler_digests(f"{self.DIGEST_A},zone1-scaler")
 
 
 if __name__ == "__main__":

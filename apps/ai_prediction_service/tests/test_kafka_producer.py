@@ -175,8 +175,24 @@ class KafkaPredictionProducerTests(unittest.TestCase):
         self.fake.delivery_error = None
         self.fake.outstanding = 1
         with self.assertLogs("ai_prediction_service.messaging.kafka_producer", level="ERROR"):
-            with self.assertRaisesRegex(PredictionPublicationError, "timed out"):
+            with self.assertRaisesRegex(PredictionPublicationError, "timed out") as ctx:
                 self.publish()
+        # Le message nomme la connexion utilisée et la cause la plus fréquente.
+        message = str(ctx.exception)
+        self.assertIn("bootstrap=localhost:9094", message)
+        self.assertIn("security.protocol=PLAINTEXT", message)
+        self.assertIn("APIVERSION_QUERY", message)
+
+    def test_connection_summary_never_contains_the_password(self):
+        config = KafkaProducerConfig(
+            bootstrap_servers="broker:9096",
+            security_protocol="SASL_PLAINTEXT",
+            username="gridd-ai",
+            password="ne-pas-journaliser",
+        )
+        summary = config.describe()
+        self.assertIn("sasl.username=gridd-ai", summary)
+        self.assertNotIn("ne-pas-journaliser", summary)
 
     def test_full_queue_is_polled_and_retried_once_then_reported(self):
         self.fake.queue_full = True

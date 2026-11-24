@@ -6,7 +6,7 @@ from .clients.gridd_api import GriddApiClient
 from .clients.open_meteo import OpenMeteoClient
 from .config import ServiceSettings
 from .messaging.kafka_producer import KafkaPredictionProducer
-from .models.artifacts import ArtifactRegistry
+from .models.artifacts import ArtifactRegistry, parse_approved_scaler_digests
 from .models.runtime import load_model_predictor
 from .services.data_collection import DataCollectionService
 from .services.orchestrator import PredictionOrchestrator
@@ -24,11 +24,13 @@ def main() -> int:
         )
     )
     registry = ArtifactRegistry(manifest_path)
-    approved_scalers = {
-        digest.strip()
-        for digest in os.environ.get("AI_APPROVED_SCALER_SHA256", "").split(",")
-        if digest.strip()
-    }
+    approved_scalers = parse_approved_scaler_digests(os.environ.get("AI_APPROVED_SCALER_SHA256", ""))
+    if not approved_scalers:
+        logger.error(
+            "AI_APPROVED_SCALER_SHA256 is empty: no scaler can be loaded until the 12 scaler "
+            "digests listed in %s are reviewed and approved.",
+            manifest_path,
+        )
     isolated_environment = os.environ.get("AI_ISOLATED_ENVIRONMENT", "").lower() == "true"
     settings = ServiceSettings.from_env()
     collection = DataCollectionService(

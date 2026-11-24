@@ -36,6 +36,35 @@ class UnknownZoneArtifactsError(KeyError):
     pass
 
 
+APPROVAL_SEPARATORS = re.compile(r"[\s,;]+")
+
+
+def parse_approved_scaler_digests(raw: str | None) -> frozenset[str]:
+    """Parse AI_APPROVED_SCALER_SHA256 into normalized SHA-256 digests.
+
+    Accepts commas, semicolons, spaces or newlines as separators, optional
+    quotes, and uppercase hex (PowerShell ``Get-FileHash`` prints uppercase).
+    Any entry that is not a SHA-256 digest is rejected instead of being
+    silently ignored, so a malformed approval list is visible at startup.
+    """
+    digests = set()
+    invalid = []
+    for token in APPROVAL_SEPARATORS.split(raw or ""):
+        token = token.strip().strip("'\"").lower()
+        if not token:
+            continue
+        if SHA256_PATTERN.fullmatch(token):
+            digests.add(token)
+        else:
+            invalid.append(token[:16] + ("…" if len(token) > 16 else ""))
+    if invalid:
+        raise ArtifactTrustError(
+            "AI_APPROVED_SCALER_SHA256 contains values that are not SHA-256 digests: "
+            + ", ".join(invalid)
+        )
+    return frozenset(digests)
+
+
 @dataclass(frozen=True)
 class ArtifactFile:
     path: Path
@@ -157,9 +186,17 @@ class ArtifactLoader:
     ) -> LoadedModelBundle:
         if not isolated_environment:
             raise ArtifactTrustError("Artifact loading requires an isolated environment.")
-        required_approvals = {spec.scaler_x.sha256, spec.scaler_y.sha256}
-        if not required_approvals.issubset(approved_scaler_sha256):
-            raise ArtifactTrustError("Both scaler SHA-256 values require explicit provenance approval.")
+        missing = [
+            f"{label}={artifact.sha256}"
+            for label, artifact in (("scaler_x", spec.scaler_x), ("scaler_y", spec.scaler_y))
+            if artifact.sha256 not in approved_scaler_sha256
+        ]
+        if missing:
+            raise ArtifactTrustError(
+                "Both scaler SHA-256 values require explicit provenance approval. "
+                f"Not approved for zone {spec.zone_code}: {', '.join(missing)} "
+                f"({len(approved_scaler_sha256)} approved digest(s) configured)."
+            )
 
         for artifact in (spec.model, spec.scaler_x, spec.scaler_y):
             _verify_artifact(artifact)

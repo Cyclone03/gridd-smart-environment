@@ -95,6 +95,20 @@ class KafkaProducerConfig:
             publish_timeout_seconds=timeout,
         )
 
+    def describe(self) -> str:
+        """Connection summary for logs; never includes the password."""
+        parts = [
+            f"bootstrap={self.bootstrap_servers}",
+            f"security.protocol={self.security_protocol}",
+            f"topic={self.topic}",
+        ]
+        if self.security_protocol.startswith("SASL"):
+            parts.append(f"sasl.mechanism={self.sasl_mechanism}")
+            parts.append(f"sasl.username={self.username}")
+        if self.security_protocol.endswith("SSL"):
+            parts.append(f"ssl.ca.location={self.ca_cert_path}")
+        return " ".join(parts)
+
     def client_config(self) -> dict[str, Any]:
         config: dict[str, Any] = {
             "bootstrap.servers": self.bootstrap_servers,
@@ -129,6 +143,7 @@ class KafkaPredictionProducer:
     def __init__(self, config: KafkaProducerConfig, producer: Producer | None = None):
         self._config = config
         self._producer = producer if producer is not None else Producer(config.client_config())
+        logger.info("Kafka producer configured: %s", config.describe())
 
     @classmethod
     def from_env(
@@ -254,9 +269,16 @@ class KafkaPredictionProducer:
                 f"Kafka flush failed for {self._config.topic}."
             ) from exc
         if outstanding:
+            hint = ""
+            if self._config.security_protocol == "PLAINTEXT":
+                hint = (
+                    " If librdkafka logs 'Disconnected ... in state APIVERSION_QUERY', the broker "
+                    "listener expects TLS/SASL: check KAFKA_BOOTSTRAP_SERVERS and "
+                    "KAFKA_SECURITY_PROTOCOL."
+                )
             raise PredictionPublicationError(
                 f"Kafka delivery timed out for {self._config.topic} "
-                f"({outstanding} message(s) outstanding)."
+                f"({outstanding} message(s) outstanding; {self._config.describe()}).{hint}"
             )
         if not delivery_reports:
             raise PredictionPublicationError(
