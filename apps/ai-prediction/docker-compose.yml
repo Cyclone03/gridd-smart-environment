@@ -2,13 +2,13 @@ services:
   ai-prediction:
     image: ${AI_PREDICTION_IMAGE:-gridd-ai-prediction-service:local}
     build:
-      context: .
+      context: apps/ai-prediction
       dockerfile: Dockerfile
     init: true
     restart: unless-stopped
     stop_grace_period: 2m
     env_file:
-      - .env
+      - apps/ai-prediction/.env
     volumes:
       - ai-prediction-state:/var/lib/ai-predictions
     networks:
