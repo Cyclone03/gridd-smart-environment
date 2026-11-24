@@ -12,11 +12,11 @@ services:
     volumes:
       - ai-prediction-state:/var/lib/ai-predictions
     networks:
-      - gridd-backend
+      - dokploy-network
 
 networks:
-    - dokploy-network
-    - default
+  dokploy-network:
+    external: true
 
 # volumes:
 #   ai-prediction-state:
