@@ -18,5 +18,5 @@ networks:
   dokploy-network:
     external: true
 
-# volumes:
-#   ai-prediction-state:
+volumes:
+  ai-prediction-state:
