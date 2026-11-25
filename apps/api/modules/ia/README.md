@@ -29,6 +29,7 @@ légère et n'importe jamais TensorFlow ni numpy.
 | `AI_STATE_DIR` | `~/.gridd-ai-prediction` (`/var/lib/ai-predictions` dans l'image) | dossier du registre et du battement de cœur |
 | `AI_PREDICTION_LEDGER_PATH`, `AI_PREDICTION_HEARTBEAT_PATH` | dans `AI_STATE_DIR` | chemins explicites |
 | `AI_PREDICTION_INTERVAL_SECONDS` | `3600` | intervalle entre deux cycles |
+| `AI_PREDICTION_ALIGN_SECONDS` / `AI_PREDICTION_ALIGN_OFFSET_SECONDS` | `900` / `60` | cycles lancés à HH:01, HH:16, HH:31 ou HH:46 (créneaux Open-Meteo, voir Dépannage) ; `0` désactive l'alignement |
 | `AI_PREDICTION_HEARTBEAT_INTERVAL_SECONDS` / `_MAX_AGE_SECONDS` | `30` / `180` | battement de cœur et seuil du healthcheck |
 | `AI_OBSERVATION_SOURCE` | `database` | `database` (lecture directe) ou `api` (`GRIDD_API_BASE_URL`) |
 | `OPEN_METEO_LATITUDE`, `OPEN_METEO_LONGITUDE` | — (obligatoires) | position pour Open-Meteo |
@@ -172,6 +173,24 @@ Séparateurs acceptés : virgule, point-virgule, espace ou retour à la ligne ;
 majuscules (sortie de `Get-FileHash`) et guillemets tolérés. Une valeur qui
 n'est pas une empreinte SHA-256 fait échouer le démarrage. Les modèles `.h5`
 sont vérifiés par leur SHA-256 à chaque chargement.
+
+### `Indoor and outdoor timestamps differ by more than five minutes`
+
+Open-Meteo donne ses conditions courantes par pas de 15 minutes
+(`current.time` = début du quart d'heure, par exemple 16:15 jusqu'à 16:29).
+L'orchestrateur exige au plus 5 minutes d'écart avec les mesures intérieures :
+un cycle lancé à 16:22 échoue pour toutes les zones. Le planificateur aligne
+donc ses cycles sur `AI_PREDICTION_ALIGN_SECONDS` (900) + `AI_PREDICTION_ALIGN_OFFSET_SECONDS`
+(60) : le premier cycle attend au plus 15 minutes après le démarrage. Un cycle
+manuel (`--once`) n'est pas aligné : le lancer entre HH:01 et HH:04 (ou
+HH:16–19, HH:31–34, HH:46–49).
+
+### `temperature observation are stale (… seconds old)`
+
+Aucune mesure récente (moins de 10 minutes) pour la zone : le capteur
+n'émet plus, ou ses mesures sont rejetées par l'ingestion (voir les journaux
+`[ingestion] message rejeté` du service `kafka-consumer`, par exemple
+`zone incohérente` lorsqu'un capteur a changé de zone).
 
 ### `Artifact loading requires an isolated environment`
 

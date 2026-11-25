@@ -1,4 +1,5 @@
 import logging
+import math
 import threading
 import time
 from collections.abc import Callable
@@ -23,11 +24,13 @@ class PredictionScheduler:
         heartbeat: Heartbeat,
         *,
         monotonic: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
     ):
         self._run_cycle = run_cycle
         self._settings = settings
         self._heartbeat = heartbeat
         self._monotonic = monotonic
+        self._wall_clock = wall_clock
 
     def run(self, stop_event: threading.Event) -> None:
         self._write_heartbeat()
@@ -39,7 +42,7 @@ class PredictionScheduler:
             daemon=True,
         )
         heartbeat_thread.start()
-        next_run = self._monotonic()
+        next_run = self.next_run_after(self._monotonic())
         try:
             while not stop_event.is_set():
                 delay = max(0.0, next_run - self._monotonic())
@@ -60,9 +63,26 @@ class PredictionScheduler:
                 now = self._monotonic()
                 while next_run <= now:
                     next_run += self._settings.interval_seconds
+                next_run = self.next_run_after(next_run)
         finally:
             heartbeat_stop.set()
             heartbeat_thread.join(timeout=self._settings.heartbeat_interval_seconds + 1)
+
+    def next_run_after(self, earliest: float) -> float:
+        """Instant (horloge monotone) du premier créneau aligné à partir de ``earliest``."""
+        align = self._settings.align_seconds
+        if not align:
+            return earliest
+        now_monotonic = self._monotonic()
+        now_wall = self._wall_clock()
+        earliest_wall = now_wall + max(0.0, earliest - now_monotonic)
+        offset = self._settings.align_offset_seconds
+        slot_wall = math.ceil((earliest_wall - offset) / align) * align + offset
+        logger.info(
+            "Next prediction cycle at %s UTC.",
+            time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(slot_wall)),
+        )
+        return now_monotonic + (slot_wall - now_wall)
 
     def _heartbeat_loop(self, stop_event: threading.Event) -> None:
         while not stop_event.wait(self._settings.heartbeat_interval_seconds):

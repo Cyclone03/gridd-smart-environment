@@ -72,3 +72,37 @@ class PredictionSchedulerTests(SimpleTestCase):
             self.assertFalse(probe.is_fresh(10, now=heartbeat.stat().st_mtime + 11))
             self.assertFalse(probe.is_fresh(10, now=heartbeat.stat().st_mtime - 1))
             self.assertTrue(probe.is_fresh(10, now=heartbeat.stat().st_mtime + 1))
+
+
+class SchedulerAlignmentTests(SimpleTestCase):
+    """Les cycles démarrent juste après un quart d'heure : l'écart avec les
+    conditions courantes d'Open-Meteo (pas de 15 min) reste sous 5 minutes."""
+
+    def scheduler(self, wall_now, monotonic_now=1000.0):
+        return PredictionScheduler(
+            lambda: 0,
+            SchedulerSettings(align_seconds=900, align_offset_seconds=60),
+            FileHeartbeat("/tmp/unused"),
+            monotonic=lambda: monotonic_now,
+            wall_clock=lambda: wall_now,
+        )
+
+    def test_waits_for_the_next_quarter_hour_plus_offset(self):
+        quarter = 1_795_623_300.0  # 2026-11-25 16:15:00 UTC
+        scheduler = self.scheduler(wall_now=quarter + 7 * 60 + 32)  # 16:22:32
+        with self.assertLogs("modules.ia.core.services.prediction_scheduler", level="INFO"):
+            next_run = scheduler.next_run_after(1000.0)
+        self.assertAlmostEqual(next_run - 1000.0, (quarter + 900 + 60) - (quarter + 452))
+
+    def test_runs_now_when_already_on_a_slot_and_keeps_the_interval_aligned(self):
+        slot = 1_795_623_300.0 + 60
+        scheduler = self.scheduler(wall_now=slot)
+        with self.assertLogs("modules.ia.core.services.prediction_scheduler", level="INFO"):
+            self.assertAlmostEqual(scheduler.next_run_after(1000.0), 1000.0)
+            self.assertAlmostEqual(scheduler.next_run_after(1000.0 + 3600), 1000.0 + 3600)
+
+    def test_alignment_settings_are_validated(self):
+        with self.assertRaises(ValueError):
+            SchedulerSettings(align_seconds=900, align_offset_seconds=900)
+        with self.assertRaises(ValueError):
+            SchedulerSettings(align_seconds=-1)

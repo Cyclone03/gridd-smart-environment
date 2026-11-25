@@ -376,6 +376,9 @@ AI_PREDICTION_HEARTBEAT_PATH = os.getenv("AI_PREDICTION_HEARTBEAT_PATH") or str(
 AI_PREDICTION_INTERVAL_SECONDS = env_int("AI_PREDICTION_INTERVAL_SECONDS", 3600)
 AI_PREDICTION_HEARTBEAT_INTERVAL_SECONDS = env_float("AI_PREDICTION_HEARTBEAT_INTERVAL_SECONDS", 30)
 AI_PREDICTION_HEARTBEAT_MAX_AGE_SECONDS = env_float("AI_PREDICTION_HEARTBEAT_MAX_AGE_SECONDS", 180)
+# Cycles alignés sur les quarts d'heure d'Open-Meteo (+ 60 s) : voir SchedulerSettings.
+AI_PREDICTION_ALIGN_SECONDS = env_float("AI_PREDICTION_ALIGN_SECONDS", 900)
+AI_PREDICTION_ALIGN_OFFSET_SECONDS = env_float("AI_PREDICTION_ALIGN_OFFSET_SECONDS", 60)
 # Source des mesures intérieures : « database » (lecture directe) ou « api » (REST).
 AI_OBSERVATION_SOURCE = os.getenv("AI_OBSERVATION_SOURCE", "database").strip().lower()
 GRIDD_API_BASE_URL = os.getenv("GRIDD_API_BASE_URL", "http://localhost:8000").rstrip("/")
@@ -404,6 +407,10 @@ LOGGING = {
         "django": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
         "modules": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
         "shared": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        # Requêtes de robots avec un en-tête Host inconnu (IP publique, autre
+        # domaine) : Django répond 400, la ligne d'accès de Daphne suffit ; sans
+        # ceci, chaque requête produit une trace de pile complète en ERROR.
+        "django.security.DisallowedHost": {"handlers": [], "level": "CRITICAL", "propagate": False},
         # « N of M channels over capacity » est journalisé en INFO à chaque envoi.
         "channels_redis": {"handlers": ["console"], "level": "WARNING", "propagate": False},
     },

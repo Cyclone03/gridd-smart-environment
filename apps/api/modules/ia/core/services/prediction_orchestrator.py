@@ -193,7 +193,11 @@ class PredictionOrchestrator:
                     successes.append(prediction)
             except Exception as exc:
                 # This boundary deliberately isolates one zone; every failure is logged and returned.
-                logger.exception("Climate prediction failed for zone %s.", zone_code)
+                if isinstance(exc, PredictionInputError):
+                    # Expected data condition (stale, incoherent…): no stack trace.
+                    logger.error("Climate prediction skipped for zone %s: %s", zone_code, exc)
+                else:
+                    logger.exception("Climate prediction failed for zone %s.", zone_code)
                 failures.append(
                     ZonePredictionFailure(
                         zone_code=zone_code,
@@ -253,7 +257,11 @@ class PredictionOrchestrator:
                 raise PredictionInputError(f"{label} have a timestamp in the future.")
 
         if max(timestamps) - min(timestamps) > MAX_INPUT_SKEW:
-            raise PredictionInputError("Indoor and outdoor timestamps differ by more than five minutes.")
+            raise PredictionInputError(
+                "Indoor and outdoor timestamps differ by more than five minutes "
+                f"(temperature={temperature_at.isoformat()}, humidity={humidity_at.isoformat()}, "
+                f"Open-Meteo current={weather_at.isoformat()})."
+            )
 
         # Anchor H+1 to the newest timestamp among the coherent input values.
         return max(timestamps)

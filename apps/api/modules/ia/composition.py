@@ -70,6 +70,8 @@ def scheduler_settings() -> SchedulerSettings:
         heartbeat_interval_seconds=settings.AI_PREDICTION_HEARTBEAT_INTERVAL_SECONDS,
         heartbeat_max_age_seconds=settings.AI_PREDICTION_HEARTBEAT_MAX_AGE_SECONDS,
         heartbeat_path=Path(settings.AI_PREDICTION_HEARTBEAT_PATH),
+        align_seconds=settings.AI_PREDICTION_ALIGN_SECONDS,
+        align_offset_seconds=settings.AI_PREDICTION_ALIGN_OFFSET_SECONDS,
     )
 
 
