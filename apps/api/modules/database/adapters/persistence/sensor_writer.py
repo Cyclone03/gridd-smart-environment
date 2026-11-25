@@ -1,4 +1,8 @@
+import logging
+
 from modules.database.models import Sensor
+
+logger = logging.getLogger(__name__)
 
 
 class SensorWriter:
@@ -13,7 +17,9 @@ class SensorWriter:
     VOLATILE_KEYS = frozenset({"observed_at", "observedAt", "timestamp", "received_at", "_kafka"})
 
     def upsert(self, *, node_id, metric, unit, zone, metadata) -> tuple[Sensor, bool]:
-        """Retourne ``(capteur, created)``."""
+        """Retourne ``(capteur, changed)`` : ``changed`` est vrai si le capteur
+        vient d'être créé ou a changé de zone (la liste des zones doit alors
+        être republiée)."""
         sensor, created = Sensor.objects.get_or_create(
             node_id=node_id,
             sensor_type=metric,
@@ -25,11 +31,25 @@ class SensorWriter:
                 "active": True,
             },
         )
+        if created:
+            return sensor, True
+        changed_fields = []
         stable = self._stable(metadata)
-        if not created and self._stable(sensor.metadata) != stable:
+        if self._stable(sensor.metadata) != stable:
             sensor.metadata = stable
-            sensor.save(update_fields=["metadata"])
-        return sensor, created
+            changed_fields.append("metadata")
+        moved = sensor.zone_id != zone.pk
+        if moved:
+            # Le message capteur fait foi : capteur déplacé ou réétiqueté.
+            logger.warning(
+                "Capteur %s/%s rattaché à la zone %s (auparavant zone id=%s).",
+                node_id, metric, zone.code, sensor.zone_id,
+            )
+            sensor.zone = zone
+            changed_fields.append("zone")
+        if changed_fields:
+            sensor.save(update_fields=changed_fields)
+        return sensor, moved
 
     @classmethod
     def stable_metadata(cls, metadata):

@@ -4,8 +4,8 @@ class ObservationPersistenceService:
     """Enregistre les observations validées (avec leur zone et leur capteur)
     puis publie ``observation.persisted`` pour les modules en aval.
 
-    Publie aussi ``zones.changed`` lorsqu'une zone ou un capteur apparaît (ou
-    qu'une zone est renommée) : les tableaux de bord reçoivent alors la
+    Publie aussi ``zones.changed`` lorsqu'une zone ou un capteur apparaît, qu'un
+    capteur change de zone (ou qu'une zone est renommée) : les tableaux de bord reçoivent alors la
     nouvelle liste des zones et de leurs mesures sans la redemander.
 
     Débit : ``persist_many`` enregistre un lot en une transaction (recherche
@@ -42,8 +42,8 @@ class ObservationPersistenceService:
                 items = []
                 for payload in payloads:
                     zone, zone_changed = self._zone(payload["zone"])
-                    sensor, sensor_created = self._sensor(payload, zone)
-                    if (zone_changed or sensor_created) and zone.code not in changed_zones:
+                    sensor, sensor_changed = self._sensor(payload, zone)
+                    if (zone_changed or sensor_changed) and zone.code not in changed_zones:
                         changed_zones.append(zone.code)
                     items.append((payload, zone, sensor))
                 created = self._observation_writer.create_many(items)

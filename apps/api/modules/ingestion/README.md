@@ -4,6 +4,12 @@ Lit les mesures brutes des capteurs, les rattache à une zone, vérifie leur
 cohérence (capteur, unité, type, valeur) et évalue leur qualité, puis publie
 les observations validées. Il n'écrit jamais en base.
 
+La zone annoncée par le message capteur fait foi : si un capteur connu
+annonce une autre zone (capteur déplacé ou réétiqueté côté GRIDD), la mesure
+est acceptée et le module Database rattache le capteur à sa nouvelle zone
+(avertissement `Capteur … rattaché à la zone …`, puis `zones.changed`). Les
+mesures déjà enregistrées gardent leur zone d'origine.
+
 ## Contrat
 
 | | |

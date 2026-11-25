@@ -3,7 +3,8 @@ from shared.kernel.metrics import MetricCatalog
 
 
 class ReadingValidator:
-    """Vérifie la cohérence d'une mesure avec son capteur et son type.
+    """Vérifie la cohérence d'une mesure avec son capteur (activation, unité)
+    et son type.
 
     Lève ``MessageRejected`` si la mesure doit être écartée ; retourne la
     valeur numérique sinon.
@@ -14,8 +15,9 @@ class ReadingValidator:
         if known_sensor is not None:
             if not known_sensor.active:
                 raise MessageRejected(f"capteur désactivé: {reading.node_id}")
-            if known_sensor.zone_code != zone_code:
-                raise MessageRejected(f"zone incohérente pour {label}: base={known_sensor.zone_code}, kafka={zone_code}")
+            # Une zone différente de celle enregistrée n'est pas une erreur : le
+            # capteur a été déplacé ou réétiqueté côté GRIDD. Le message fait foi
+            # et le module Database rattache le capteur à sa nouvelle zone.
             if known_sensor.unit != reading.unit:
                 raise MessageRejected(f"unité incohérente pour {label}: base={known_sensor.unit}, kafka={reading.unit}")
 

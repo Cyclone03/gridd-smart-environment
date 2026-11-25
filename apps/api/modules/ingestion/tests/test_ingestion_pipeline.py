@@ -43,6 +43,23 @@ class IngestionPipelineTests(TestCase):
             self.ingest(40, unit="%")
         self.assertFalse(Observation.objects.exists())
 
+    def test_sensor_follows_the_zone_announced_by_its_messages(self):
+        other = Zone.objects.create(name="Cubicule 02", code="individual-work-cubicle-02")
+        ThresholdProfile.objects.create(zone=other)
+
+        with self.assertLogs("modules.database", level="WARNING"):
+            observation = self.pipeline.ingest(
+                node_id=self.sensor.node_id,
+                observation_type="temperature",
+                value=22.5,
+                unit="°C",
+                observed_at=timezone.now(),
+                metadata={"zone": {"id": other.code, "label": other.name}},
+            )
+
+        self.sensor.refresh_from_db()
+        self.assertEqual((observation.zone, self.sensor.zone), (other, other))
+
     def test_new_zone_and_sensor_are_created_by_the_database_module(self):
         observation = self.pipeline.ingest(
             node_id="meeting-sound",
