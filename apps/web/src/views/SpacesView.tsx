@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { PageHeader } from "../components/common/PageHeader";
 import { ZoneCard } from "../components/measurements/ZoneCard";
 import { LOCALE } from "../constants/app";
+import { isDisplayMetric } from "../constants/metrics";
 import { routePath } from "../routes/definitions";
 import { useDashboard } from "../stores/dashboardStore";
 import { formatZoneType, zoneDisplayName } from "../utils/format";
@@ -13,7 +14,7 @@ export function SpacesView() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const needle = query.trim().toLocaleLowerCase(LOCALE);
-  const filtered = zones.filter((zone) =>
+  const filtered = zones.filter((zone) => zone.metrics.some(isDisplayMetric)).filter((zone) =>
     `${zoneDisplayName(zone)} ${formatZoneType(zone.zone_type)}`.toLocaleLowerCase(LOCALE).includes(needle),
   );
 

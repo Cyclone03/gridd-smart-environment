@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     "modules.realtime.apps.RealtimeConfig",
     "modules.health.apps.HealthConfig",
     "modules.simulator.apps.SimulatorConfig",
+    "modules.ia.apps.IaConfig",
 ]
 
 
@@ -307,6 +308,15 @@ KAFKA_SENSOR_TOPICS = {
     os.getenv("KAFKA_TOPIC_OCCUPANCY", "gridd.obs.occupancy.count"): "occupancy",
 }
 
+# Nœuds GRIDD qui n'annoncent pas leur zone dans leurs messages : correspondance
+# explicite « nœud=zone », séparée par des virgules (ex. node01=open-workspace).
+# Sans zone connue, la mesure est rejetée (jamais d'« espace » nommé d'après un nœud).
+GRIDD_NODE_ZONES = {
+    node.strip(): zone.strip()
+    for node, _, zone in (item.partition("=") for item in env_list("GRIDD_NODE_ZONES"))
+    if node.strip() and zone.strip()
+}
+
 # Topics de sortie des modules (voir docs/events.md).
 KAFKA_TOPICS = {
     "ingestion_observations": os.getenv("KAFKA_TOPIC_INGESTION_OBSERVATIONS", "gridd.backend.ingestion.observations"),
@@ -314,6 +324,9 @@ KAFKA_TOPICS = {
     "alarms_commands": os.getenv("KAFKA_TOPIC_ALARMS_COMMANDS", "gridd.backend.alarms.commands"),
     "database_events": os.getenv("KAFKA_TOPIC_DATABASE_EVENTS", "gridd.backend.database.events"),
     "database_replies": os.getenv("KAFKA_TOPIC_DATABASE_REPLIES", "gridd.backend.database.replies"),
+    "ai_prediction_events": os.getenv(
+        "KAFKA_TOPIC_AI_PREDICTIONS", "gridd.backend.ai_prediction.events"
+    ),
 }
 
 # Topics que le module Database persiste (vide = topics de sortie des modules métier).
@@ -321,6 +334,7 @@ DATABASE_SUBSCRIBED_TOPICS = env_list("DATABASE_SUBSCRIBED_TOPICS") or [
     KAFKA_TOPICS["ingestion_observations"],
     KAFKA_TOPICS["alarms_events"],
     KAFKA_TOPICS["alarms_commands"],
+    KAFKA_TOPICS["ai_prediction_events"],
 ]
 
 # Consumer group de chaque module : « <préfixe>.<module> ».
@@ -351,6 +365,46 @@ KAFKA_TOPIC_REPLICATION_FACTOR = env_int("KAFKA_TOPIC_REPLICATION_FACTOR", 1)
 
 
 # ---------------------------------------------------------------------------
+# Module IA (python manage.py run_ai_predictions, image Docker « ia »)
+# ---------------------------------------------------------------------------
+
+
+def env_optional_float(name):
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"{name} doit être un nombre.") from exc
+
+
+AI_STATE_DIR = Path(os.getenv("AI_STATE_DIR") or Path.home() / ".gridd-ai-prediction")
+AI_ARTIFACT_MANIFEST_PATH = os.getenv("AI_ARTIFACT_MANIFEST_PATH") or str(
+    BASE_DIR / "modules" / "ia" / "artifacts" / "manifest.json"
+)
+# Empreintes SHA-256 des scalers (pickles) approuvées par l'équipe : rien n'est
+# chargé sans approbation explicite (voir modules/ia/README.md).
+AI_APPROVED_SCALER_SHA256 = os.getenv("AI_APPROVED_SCALER_SHA256", "")
+# Confirmation que le chargement des artefacts se fait dans un conteneur isolé.
+AI_ISOLATED_ENVIRONMENT = env_bool("AI_ISOLATED_ENVIRONMENT", False)
+AI_PREDICTION_LEDGER_PATH = os.getenv("AI_PREDICTION_LEDGER_PATH") or str(AI_STATE_DIR / "predictions.sqlite3")
+AI_PREDICTION_HEARTBEAT_PATH = os.getenv("AI_PREDICTION_HEARTBEAT_PATH") or str(AI_STATE_DIR / "heartbeat")
+AI_PREDICTION_INTERVAL_SECONDS = env_int("AI_PREDICTION_INTERVAL_SECONDS", 3600)
+AI_PREDICTION_HEARTBEAT_INTERVAL_SECONDS = env_float("AI_PREDICTION_HEARTBEAT_INTERVAL_SECONDS", 30)
+AI_PREDICTION_HEARTBEAT_MAX_AGE_SECONDS = env_float("AI_PREDICTION_HEARTBEAT_MAX_AGE_SECONDS", 180)
+# Cycles alignés sur les quarts d'heure d'Open-Meteo (+ 60 s) : voir SchedulerSettings.
+AI_PREDICTION_ALIGN_SECONDS = env_float("AI_PREDICTION_ALIGN_SECONDS", 900)
+AI_PREDICTION_ALIGN_OFFSET_SECONDS = env_float("AI_PREDICTION_ALIGN_OFFSET_SECONDS", 60)
+# Source des mesures intérieures : « database » (lecture directe) ou « api » (REST).
+AI_OBSERVATION_SOURCE = os.getenv("AI_OBSERVATION_SOURCE", "database").strip().lower()
+GRIDD_API_BASE_URL = os.getenv("GRIDD_API_BASE_URL", "http://localhost:8000").rstrip("/")
+AI_HTTP_TIMEOUT_SECONDS = env_float("AI_HTTP_TIMEOUT_SECONDS", env_float("HTTP_TIMEOUT_SECONDS", 10))
+OPEN_METEO_LATITUDE = env_optional_float("OPEN_METEO_LATITUDE")
+OPEN_METEO_LONGITUDE = env_optional_float("OPEN_METEO_LONGITUDE")
+
+
+# ---------------------------------------------------------------------------
 # Journalisation (sortie standard, exploitée par Docker)
 # ---------------------------------------------------------------------------
 
@@ -370,6 +424,10 @@ LOGGING = {
         "django": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
         "modules": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
         "shared": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        # Requêtes de robots avec un en-tête Host inconnu (IP publique, autre
+        # domaine) : Django répond 400, la ligne d'accès de Daphne suffit ; sans
+        # ceci, chaque requête produit une trace de pile complète en ERROR.
+        "django.security.DisallowedHost": {"handlers": [], "level": "CRITICAL", "propagate": False},
         # « N of M channels over capacity » est journalisé en INFO à chaque envoi.
         "channels_redis": {"handlers": ["console"], "level": "WARNING", "propagate": False},
         # Requêtes de robots sur l'IP brute (« Invalid HTTP_HOST header ») : déjà

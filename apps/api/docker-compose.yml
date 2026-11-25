@@ -1,5 +1,9 @@
 
-# Démarrage autonome de l'API GRIDD et du consommateur Kafka.
+# Démarrage autonome du backend GRIDD : API, consommateurs Kafka et module IA.
+# Chemins relatifs à la racine du dépôt (comme dans Dokploy).
+# Deux images construites depuis apps/api (docker/Dockerfile) :
+#   cible « api » : api et kafka-consumer ;
+#   cible « ia »  : ai-prediction (TensorFlow, scikit-learn).
 
 services:
   api:
@@ -7,6 +11,7 @@ services:
     build:
       context: ./apps/api
       dockerfile: docker/Dockerfile
+      target: api
     restart: unless-stopped
     env_file:
       - apps/api/.env
@@ -55,3 +60,45 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+  ai-prediction:
+    image: ${GRIDD_IA_IMAGE:-gridd-ia:latest}
+    build:
+      context: ./apps/api
+      dockerfile: docker/Dockerfile
+      target: ia
+    init: true
+    restart: unless-stopped
+    # Laisse le cycle en cours se terminer à l'arrêt (SIGTERM).
+    stop_grace_period: 2m
+    env_file:
+      - apps/api/.env
+    # « environment » l'emporte sur env_file : ces valeurs propres à l'image IA
+    # ne peuvent pas être écrasées par erreur par apps/api/.env.
+    environment:
+      # Publication confirmée sur le Kafka partagé, persistée par kafka-consumer.
+      EVENT_BUS: kafka
+      RUN_MIGRATIONS: "false"
+      AI_ISOLATED_ENVIRONMENT: "true"
+      AI_STATE_DIR: /var/lib/ai-predictions
+      AI_PREDICTION_LEDGER_PATH: /var/lib/ai-predictions/predictions.sqlite3
+      AI_PREDICTION_HEARTBEAT_PATH: /var/lib/ai-predictions/heartbeat
+      AI_ARTIFACT_MANIFEST_PATH: /app/modules/ia/artifacts/manifest.json
+    command: ["python", "manage.py", "run_ai_predictions"]
+    volumes:
+      - ../files/gridd-kafka-ca.crt:/app/secrets/gridd-kafka-ca.crt:ro
+      # Registre des prédictions publiées et battement de cœur : doit survivre
+      # aux redéploiements (sinon une prédiction peut être republiée).
+      - ai-prediction-state:/var/lib/ai-predictions
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "ai_prediction_healthcheck"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 300s
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  ai-prediction-state:

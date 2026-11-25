@@ -1,0 +1,2 @@
+class TimestampFormatError(ValueError):
+    pass

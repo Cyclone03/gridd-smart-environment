@@ -8,6 +8,8 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { vi } from "vitest";
 import type { AlarmMetadata, AlarmRule } from "../src/resources/alarmRule";
 import type { Alert } from "../src/resources/alert";
+import type { ClimatePrediction } from "../src/resources/climatePrediction";
+import type { WeatherSnapshot } from "../src/resources/weatherSnapshot";
 import type { Observation } from "../src/resources/observation";
 import type { Zone } from "../src/resources/zone";
 import type { ZoneHistory } from "../src/resources/history";
@@ -40,7 +42,8 @@ export function mockApi(handler: Handler) {
     requests.push(request);
     const result = handler(request) ?? { status: 404, body: { detail: "Introuvable (test)." } };
     const status = result.status ?? 200;
-    return new Response(status === 204 ? null : JSON.stringify(result.body ?? {}), {
+    const body = "body" in result ? result.body : {};
+    return new Response(status === 204 ? null : JSON.stringify(body), {
       status,
       headers: { "Content-Type": "application/json" },
     });
@@ -107,6 +110,40 @@ export const observations: Observation[] = [
     quality_reason: "",
   },
 ];
+
+export function climatePrediction(overrides: Partial<ClimatePrediction> = {}): ClimatePrediction {
+  return {
+    prediction_id: 17,
+    prediction_event_id: "4b9ab2a9-98a8-47d1-92d0-b794957ca4a7",
+    zone_code: "meeting-room",
+    generated_at: new Date(Date.now() - 60_000).toISOString(),
+    target_at: new Date(Date.now() + 59 * 60_000).toISOString(),
+    predicted_temperature_c: 23.8,
+    predicted_humidity_percent: 48.2,
+    model_version: "zone-model-v1",
+    prediction_mode: "experimental",
+    ...overrides,
+  };
+}
+
+export function weatherSnapshot(overrides: Partial<WeatherSnapshot> = {}): WeatherSnapshot {
+  const generated = new Date(Date.now() - 30_000);
+  const current = new Date(Date.now() - 10_000);
+  const forecast = new Date(Date.now() + 60 * 60_000);
+  return {
+    weather_snapshot_id: 1,
+    weather_snapshot_event_id: "88b8053b-634b-4a43-92b0-c22bed310001",
+    generated_at: generated.toISOString(),
+    provider: "open-meteo",
+    current_at: current.toISOString(),
+    current_temperature_c: 19.2,
+    current_relative_humidity_percent: 55.4,
+    forecast_h1_at: forecast.toISOString(),
+    forecast_h1_temperature_c: 20.1,
+    forecast_h1_relative_humidity_percent: 58.2,
+    ...overrides,
+  };
+}
 
 /**
  * Historique de `points` créneaux de 5 min se terminant maintenant (dans la
@@ -227,13 +264,15 @@ export function mockRealtime(snapshot: Partial<DashboardSnapshot> = {}) {
 
     constructor(readonly url: string) {
       sockets.push(this);
-      setTimeout(() => {
-        if (this.readyState !== FakeWebSocket.CONNECTING) return;
-        this.readyState = FakeWebSocket.OPEN;
-        this.onopen?.(new Event("open"));
-        this.emit({ event: "realtime.connected" });
-        this.emit({ event: "dashboard.snapshot", data: state });
-      }, 0);
+      setTimeout(() => this.open(), 0);
+    }
+
+    open() {
+      if (this.readyState !== FakeWebSocket.CONNECTING) return;
+      this.readyState = FakeWebSocket.OPEN;
+      this.onopen?.(new Event("open"));
+      this.emit({ event: "realtime.connected" });
+      this.emit({ event: "dashboard.snapshot", data: state });
     }
 
     send(raw: string) {
@@ -263,6 +302,12 @@ export function mockRealtime(snapshot: Partial<DashboardSnapshot> = {}) {
     /** Pousse un message à toutes les connexions ouvertes. */
     push(message: unknown) {
       sockets.forEach((socket) => socket.emit(message));
+    },
+    disconnect() {
+      sockets[sockets.length - 1]?.close();
+    },
+    openLatest() {
+      sockets[sockets.length - 1]?.open();
     },
   };
 }
@@ -298,6 +343,8 @@ export function dashboardApi(extra: Handler = () => undefined, snapshot: Partial
     const custom = extra(request);
     if (custom) return custom;
     if (request.path === "/api/alarm-rules/metadata/") return { body: metadata };
+    if (request.path === "/api/climate-predictions/latest/") return { body: [] };
+    if (request.path === "/api/weather/latest/") return { body: null };
     return undefined;
   });
   return { ...api, realtime };

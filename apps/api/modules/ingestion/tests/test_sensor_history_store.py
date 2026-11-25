@@ -3,8 +3,8 @@ from datetime import timedelta
 from django.test import SimpleTestCase
 from django.utils import timezone
 
-from modules.ingestion.domain.past_reading import PastReading
-from modules.ingestion.stores.sensor_history_store import SensorHistoryStore
+from modules.ingestion.adapters.persistence.sensor_history_store import SensorHistoryStore
+from modules.ingestion.core.domain.past_reading import PastReading
 from shared.caching.local_cache import LocalCache
 
 

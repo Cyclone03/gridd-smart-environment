@@ -61,7 +61,7 @@ l'espace, des équipements et des exigences applicables.
 
 Chaque observation enregistrée par le module `database` est publiée
 (`observation.persisted`) et évaluée par le module `alarms`
-(`RuleEvaluationService`, logique pure dans `modules/alarms/domain/`), qui
+(`RuleEvaluationService`, logique pure dans `modules/alarms/core/domain/`), qui
 publie ses décisions ; `database` les enregistre (voir
 [`events.md`](events.md)). Pour chaque
 règle active portant sur ce paramètre et sur cet espace (ou sur tous les

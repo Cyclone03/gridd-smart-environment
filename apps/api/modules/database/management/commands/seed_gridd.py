@@ -1,6 +1,8 @@
 from django.core.management.base import BaseCommand
 
 from modules.database.models import AlarmRule, Sensor, ThresholdProfile, Zone
+from shared.kernel.metrics import MetricCatalog
+from shared.kernel.sensor_identity import sensor_key
 
 
 class Command(BaseCommand):
@@ -22,8 +24,14 @@ class Command(BaseCommand):
         ("humidity", "%"),
         ("co2", "ppm"),
         ("sound_level", "dBA"),
-        ("occupancy", "count"),
     ]
+
+    SENSORS_BY_ZONE = {
+        "server-equipment-room": [
+            ("temperature", "°C"),
+            ("humidity", "%"),
+        ],
+    }
 
     # Créées seulement si aucune règle n'existe. Valeurs illustratives.
     DEMO_RULES = [
@@ -44,8 +52,20 @@ class Command(BaseCommand):
             if not profile.enabled:
                 profile.enabled = True
                 profile.save(update_fields=["enabled"])
-            for sensor_type, unit in self.SENSORS:
+            sensors = self.SENSORS_BY_ZONE.get(code, self.SENSORS)
+            for sensor_type, unit in sensors:
                 self._seed_sensor(zone, name, sensor_type, unit)
+            configured_types = {sensor_type for sensor_type, _ in sensors}
+            unused = [sensor_type for sensor_type, _ in self.SENSORS if sensor_type not in configured_types]
+            for sensor_type in [*unused, "occupancy"]:
+                # Capteurs de démonstration sans aucune mesure : désactivés. Un
+                # capteur qui reçoit des mesures réelles n'est jamais désactivé.
+                Sensor.objects.filter(
+                    zone=zone,
+                    node_id=sensor_key(code, sensor_type),
+                    sensor_type=sensor_type,
+                    observations__isnull=True,
+                ).update(active=False)
 
         if not AlarmRule.objects.exists():
             for rule in self.DEMO_RULES:
@@ -56,17 +76,12 @@ class Command(BaseCommand):
 
     @staticmethod
     def _seed_sensor(zone, zone_name, sensor_type, unit):
-        demo_node_id = f"{zone.code}-{sensor_type}"
-        real_sensor_exists = (
-            zone.sensors.filter(sensor_type=sensor_type, active=True).exclude(node_id=demo_node_id).exists()
-        )
-        if real_sensor_exists:
-            Sensor.objects.filter(node_id=demo_node_id, sensor_type=sensor_type).update(active=False)
-            return
+        """Capteur de la zone pour cette mesure (même identifiant que les
+        capteurs créés à la réception des mesures réelles)."""
         sensor, _ = Sensor.objects.get_or_create(
-            node_id=demo_node_id,
+            node_id=sensor_key(zone.code, sensor_type),
             sensor_type=sensor_type,
-            defaults={"label": f"{zone_name} — {sensor_type}", "zone": zone, "unit": unit},
+            defaults={"label": f"{zone_name} — {MetricCatalog.get(sensor_type).label}", "zone": zone, "unit": unit},
         )
         if not sensor.active:
             sensor.active = True

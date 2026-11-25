@@ -13,6 +13,6 @@ class AlarmsConfig(ModuleConfig):
         from shared.contracts.topics import Topics
         from shared.messaging import Subscription
 
-        from .consumers.alarms_consumer import AlarmsConsumer
+        from .composition import alarms_consumer
 
-        return [Subscription(name="alarms", topics=(Topics.database_events(),), handler_factory=AlarmsConsumer.build)]
+        return [Subscription(name="alarms", topics=(Topics.database_events(),), handler_factory=alarms_consumer)]

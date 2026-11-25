@@ -29,3 +29,7 @@ htmlcov/
 Dockerfile
 docker-compose*.yml
 README.md
+
+# Fichiers de modèles hors manifeste (les artefacts vérifiés sont dans
+# modules/ia/artifacts/)
+/modelZone*.h5

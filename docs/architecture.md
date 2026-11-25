@@ -13,7 +13,7 @@ autonomes** qui ne communiquent **que par Kafka**.
                                        │ topics capteurs gridd.obs.*
 ┌──────────────────────────────────────▼──────────────────────────────────────────┐
 │                                     Kafka                                       │
-│  ingestion.observations · alarms.* · database.*                              │
+│  ingestion.observations · alarms.* · database.* · ai_prediction.events       │
 └────┬──────▲──────────┬──────▲─────────────┬──────▲──────────┬──────▲────────────┘
      │      │          │      │             │      │          │      │
 ┌────┼──────┼──────────┼──────┼─────────────┼──────┼──────────┼──────┼────────────┐
@@ -23,7 +23,7 @@ autonomes** qui ne communiquent **que par Kafka**.
 │ │ (capteurs) │ │ (seul à écrire)│ │ règles, alertes  │ │ WebSocket      │         │
 │ └────────────┘ └───────┬────────┘ └────────┬─────────┘ └───────┬────────┘         │
 │                        │ PostgreSQL        │                    │                 │
-│          observations · history · health                                     │
+│          observations · history · health · ia (image Docker séparée)          │
 │ ┌──────────────────────┴───────────────────┴────────────────────┴───────────────┐ │
 │ │              Routage : config/urls.py (REST) · config/asgi.py (WS)            │ │
 │ └───────────────────────────────────────▲───────────────────────────────────────┘ │
@@ -47,15 +47,15 @@ diffusait. Kafka n'était utilisé qu'en entrée et tous les composants
 | Élément existant | Décision | Destination |
 |---|---|---|
 | Modèles et migrations `core` | **Conservés** à l'identique (label `core` gardé : tables, historique des migrations et permissions `core.*_alarmrule` inchangés). Ajout d'`Observation.event_id` (idempotence). | `modules/database/models/`, `modules/database/migrations/` |
-| Catalogue des mesures (`metrics.py`) | **Déplacé** dans le noyau partagé, découpé en classes | `shared/metrics/` |
+| Catalogue des mesures (`metrics.py`) | **Déplacé** dans le noyau partagé, découpé en classes | `shared/kernel/metrics/` |
 | `services.ingest_observation` (ingestion + qualité + alarmes + diffusion) | **Refactorisé** : ingestion et qualité dans `ingestion`, persistance dans `database`, alarmes dans `alarms`, diffusion dans `realtime`, reliés par Kafka | 4 modules |
 | `kafka.py`, `consume_kafka` | **Supprimés**, remplacés par `SensorMessageParser` (même format accepté) et `run_consumers` (tous les modules) | `modules/ingestion/`, `shared/messaging/` |
 | `alarm_engine.py` | **Conservé** dans sa logique, découpé : évaluation pure (`ConditionEvaluator`, `AlarmStateMachine`, `RuleChangePolicy`) et services qui publient les décisions | `modules/alarms/` |
 | `history.py`, vue `zone_history` | **Conservés**, découpés : `PeriodParser`, `BucketAggregator`, `HistoryStatistics`, service, contrôleur | `modules/history/` |
-| `api.py`, `alarm_api.py` | **Refactorisés** en contrôleurs minces + services + repositories, contrat REST identique | `observations`, `alarms`, `health` |
+| `api.py`, `alarm_api.py` | **Refactorisés** en contrôleurs minces + services (cœur) + repositories (adaptateurs), contrat REST identique | `observations`, `alarms`, `health` |
 | `auth_api.py`, jetons, permissions | **Supprimés** (pas d'authentification pour le moment) ; page de connexion retirée du frontend | — |
 | Confort thermique et estimation énergétique | Retirés des services actifs; schéma historique conservé pour préserver les données | — |
-| Validation métier des règles dans le serializer | **Déplacée** dans `AlarmRuleValidator` (logique pure) | `modules/alarms/domain/` |
+| Validation métier des règles dans le serializer | **Déplacée** dans `AlarmRuleValidator` (logique pure) | `modules/alarms/core/domain/` |
 | `realtime.py`, `consumers.py` (Channels) | **Déplacés** ; la diffusion part désormais des faits persistés | `modules/realtime/` |
 | Simulateur (écrivait en base) | **Refactorisé** : publie sur les topics capteurs comme un vrai capteur | `modules/simulator/` |
 | Admin Django | **Conservé**, une classe par fichier | `modules/database/admin/` |
@@ -73,31 +73,53 @@ diffusait. Kafka n'était utilisé qu'en entrée et tous les composants
 | `history` | Historique agrégé sur une période | — | `/api/zones/<code>/history/` |
 | `health` | Santé du processus | — | `/api/health/` |
 | `simulator` | Mesures de démonstration | → topics capteurs | — |
+| `ia` | Prédictions climatiques H+1 par zone (Keras) et météo Open-Meteo ; image Docker `ia` | → `ai_prediction.events` | — (`run_ai_predictions`) |
 
-`shared/` n'est pas un module : c'est le noyau commun (messagerie, contrats
-d'événements, catalogue des mesures, périodes d'analyse, format d'erreur HTTP).
+`shared/` n'est pas un module :
 
-### Organisation interne d'un module
+- `shared/kernel/` est le **noyau pur** (bibliothèque standard uniquement) :
+  enveloppe et types d'événements, catalogue des mesures, périodes d'analyse,
+  statuts partagés (`QualityStatus`, `AlertSeverity`…), horodatages. C'est le
+  seul code partagé qu'un cœur de module peut importer ;
+- le reste (`messaging/`, `contracts/topics.py`, `http/`, `caching/`) est
+  l'infrastructure Django/Kafka, utilisée par les adaptateurs.
 
-Chaque module ne contient que les dossiers dont il a besoin :
+Chaque module documente son contrat d'intégration dans
+`modules/<module>/README.md`.
+
+### Organisation interne d'un module (architecture hexagonale)
+
+Chaque module est **indépendant et réutilisable** : son cœur ne connaît ni
+Django, ni Kafka, ni les autres modules. Il peut être copié dans un autre projet
+avec `shared/kernel/`, en ne remplaçant que les adaptateurs.
 
 ```text
 modules/<module>/
-├── apps.py          configuration Django + abonnements Kafka du module
-├── urls.py          routes HTTP du module
-├── controllers/     endpoints : lisent la requête, délèguent au service, sérialisent
-├── services/        logique métier et communication Kafka (producteurs, commandes)
-├── consumers/       point d'entrée Kafka : décode et transmet au service
-├── producers/       publication dans les topics de sortie du module
-├── domain/          logique pure (sans base, sans Kafka, sans HTTP)
-├── repositories/    lectures en base (lecture seule)
-├── stores/          vue locale d'un état publié (voir « Cohérence »)
-├── serializers/     forme des données HTTP
+├── README.md        contrat : rôle, ports, événements entrants/sortants, endpoints, réglages
+├── apps.py          déclaration Django + abonnements Kafka (subscriptions())
+├── composition.py   racine de composition : construit les services avec leurs adaptateurs
+├── core/            Python pur (vérifié par les tests)
+│   ├── domain/      règles métier et valeurs (aucune E/S)
+│   ├── ports/       interfaces (typing.Protocol) dont le cœur a besoin
+│   └── services/    cas d'usage ; dépendances reçues par le constructeur
+├── adapters/        implémentations des ports pour ce projet
+│   ├── persistence/ lectures ORM (repositories), vues locales (stores) ;
+│   │                écritures (writers) dans le seul module database
+│   ├── messaging/   consommateur Kafka (point d'entrée), producteurs, parseurs
+│   ├── http/        contrôleurs DRF, serializers, urls.py
+│   └── websocket/   consommateurs Channels, routing.py (realtime)
+├── management/      commandes Django (emplacement imposé par Django)
 └── tests/
 ```
 
-Le module `database` remplace `repositories/` par `writers/` (écritures) et
-ajoute `models/`, `migrations/`, `admin/`, `provisioning/`.
+Le module `database` possède en plus `models/`, `migrations/` et `admin/`
+(emplacements imposés par Django). Le module `ia` ajoute `core/inference/`
+(contrat des modèles, artefacts, prédiction), `core/errors/` et `artifacts/`.
+
+Sens des dépendances : `adapters/` → `core/` ← `composition.py` ; `apps.py`,
+les contrôleurs et les commandes obtiennent leurs services par
+`composition.py`. Le cœur reçoit tout ce qui touche l'extérieur (horloge,
+fuseau, transaction, publication, lecture) par injection.
 
 ## Flux
 
@@ -119,8 +141,9 @@ ajoute `models/`, `migrations/`, `admin/`, `provisioning/`.
 
 ### Requête de lecture (frontend)
 
-`Controller` → `Service` → `Repository` (lecture seule) → réponse. Aucune
-écriture, aucune logique métier dans le contrôleur.
+`Controller` (adaptateur HTTP) → `composition` → `Service` (cœur) → port →
+`Repository` (adaptateur, lecture seule) → réponse. Aucune écriture, aucune
+logique métier dans le contrôleur.
 
 ### Requête d'écriture (frontend)
 
@@ -143,11 +166,20 @@ réception de `alarm_rule.changed`.
 `tests/test_architecture.py` échoue si :
 
 - un fichier contient plus d'une classe ;
-- un module importe un autre module (seuls `shared` et la lecture du schéma
-  `modules.database.models` sont autorisés) ;
+- un module importe un autre module (seule la lecture du schéma
+  `modules.database.models` est autorisée, et seulement hors du cœur) ;
+- le cœur d'un module (`core/`) importe Django, DRF, Channels, Kafka, un autre
+  module ou l'infrastructure `shared` (seul `shared.kernel` est permis) ;
+- `shared/kernel/` importe autre chose que la bibliothèque standard ;
 - un module autre que `database` écrit en base (`save`, `create`, `update`,
   `delete`…) ;
-- un contrôleur importe un repository, un writer ou `django.db`.
+- un contrôleur importe un adaptateur de persistance, des modèles ou `django.db` ;
+- un module installé n'a pas `README.md`, `apps.py`, `composition.py`,
+  `core/` et `adapters/`.
+
+`tests/test_shared_vocabulary.py` vérifie que les valeurs du noyau
+(`QualityStatus`, `AlertSeverity`, `ZoneType`…) sont exactement celles des
+`TextChoices` des modèles.
 
 ## Bus d'événements
 
@@ -169,7 +201,7 @@ message invalide est journalisé puis ignoré. La persistance est idempotente
 Avec Kafka, la base n'est mise à jour qu'après le passage par le module
 `database`. Un module qui dépend de son propre état publié (état des règles
 pour `alarms`, historique récent d'un capteur pour `ingestion`) garde donc une
-vue locale (`stores/`), initialisée depuis la base et alimentée par ses propres
+vue locale (stores, dans `adapters/persistence/`), initialisée depuis la base et alimentée par ses propres
 décisions. Les messages d'une même zone partagent la même clé de partition et
 sont traités dans l'ordre. Avec le bus mémoire, la base est déjà à jour et
 cette vue locale est désactivée.
@@ -194,16 +226,31 @@ Conséquences :
 Inchangé par cette refonte. Voir [`web/README.md`](../web/README.md) :
 `View` → `composable` → `service` → `requests/httpClient` → API.
 
+## Module IA
+
+Le service de prédiction est le module `modules/ia` de l'API : même code,
+même configuration, même bus, mais une image Docker dédiée (cible `ia` du
+Dockerfile, `requirements-ia.txt`) pour que TensorFlow ne charge pas l'image
+de l'API. Son planificateur (`manage.py run_ai_predictions`) lit les
+dernières mesures directement en base (ou par l'API REST), appelle
+Open-Meteo, exécute un modèle par zone et publie
+`climate_prediction.generated` / `weather_snapshot.generated` ; `database`
+les persiste et `realtime` les diffuse. Détails : `apps/api/modules/ia/README.md`.
+
 ## Évolutivité
 
 - **Nouveau paramètre mesuré** : choix dans `Sensor.SensorType`, entrée dans
-  `shared/metrics/metric_catalog.py`, topic capteur dans la configuration ;
-  côté frontend, `constants/metrics.ts`.
-- **Nouvel opérateur** : `shared/metrics/operator.py` et
-  `modules/alarms/domain/condition_evaluator.py`.
-- **Nouveau module** : dossier `modules/<nom>/` avec son `apps.py`
-  (`ModuleConfig`, abonnements dans `subscriptions()`), inscription dans
-  `INSTALLED_APPS`, routes ajoutées à `config/urls.py`. S'il doit écrire en
+  `shared/kernel/metrics/metric_catalog.py`, topic capteur dans la
+  configuration ; côté frontend, `constants/metrics.ts`.
+- **Nouvel opérateur** : `shared/kernel/metrics/operator.py` et
+  `modules/alarms/core/domain/condition_evaluator.py`.
+- **Nouveau module** : dossier `modules/<nom>/` avec `README.md`, `apps.py`
+  (`ModuleConfig`, abonnements dans `subscriptions()`), `composition.py`,
+  `core/` et `adapters/` ; inscription dans `INSTALLED_APPS`, routes
+  (`adapters/http/urls.py`) ajoutées à `config/urls.py`. S'il doit écrire en
   base, il publie un événement et `database` reçoit un writer.
+- **Réutiliser un module ailleurs** : copier `modules/<nom>/` et
+  `shared/kernel/` ; garder le cœur et réécrire les adaptateurs (ou garder ceux
+  de Django avec `shared/` si le projet hôte est aussi un projet Django).
 - **Séparer les consommateurs** : `run_consumers --module database`, etc.,
   un processus par module si la charge le demande (voir « Cohérence »).

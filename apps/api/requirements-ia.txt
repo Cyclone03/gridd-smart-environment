@@ -1,0 +1,8 @@
+# Dépendances de l'image IA (cible Docker « ia ») : API + inférence.
+# L'image API (cible « api ») n'installe que requirements.txt.
+-r requirements.txt
+numpy>=1.26
+tensorflow==2.21.0
+keras==3.15.1
+scikit-learn==1.9.1
+joblib>=1.5,<2

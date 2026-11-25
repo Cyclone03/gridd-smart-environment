@@ -1,0 +1,13 @@
+from typing import Protocol
+
+
+class AlertStore(Protocol):
+    """Alertes. Chaque méthode indique si la liste des alertes a changé."""
+
+    def raise_alert(self, *, zone, code, rule_id, severity, message, trigger_value, observation_id, refresh_fields) -> bool: ...
+
+    def resolve(self, *, zone, code, resolution, observation_id=None) -> bool: ...
+
+    def resolve_code(self, *, code, resolution) -> int: ...
+
+    def change_severity(self, *, code, severity) -> int: ...

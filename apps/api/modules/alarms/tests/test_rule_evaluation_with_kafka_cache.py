@@ -3,13 +3,13 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from modules.alarms.domain.alarm_state_machine import AlarmStateMachine
-from modules.alarms.domain.alert_message_builder import AlertMessageBuilder
-from modules.alarms.domain.condition_evaluator import ConditionEvaluator
-from modules.alarms.repositories.alarm_rule_repository import AlarmRuleRepository
-from modules.alarms.repositories.rule_state_repository import RuleStateRepository
-from modules.alarms.services.rule_evaluation_service import RuleEvaluationService
-from modules.alarms.stores.rule_state_store import RuleStateStore
+from modules.alarms.adapters.persistence.alarm_rule_repository import AlarmRuleRepository
+from modules.alarms.adapters.persistence.rule_state_repository import RuleStateRepository
+from modules.alarms.adapters.persistence.rule_state_store import RuleStateStore
+from modules.alarms.core.domain.alarm_state_machine import AlarmStateMachine
+from modules.alarms.core.domain.alert_message_builder import AlertMessageBuilder
+from modules.alarms.core.domain.condition_evaluator import ConditionEvaluator
+from modules.alarms.core.services.rule_evaluation_service import RuleEvaluationService
 from modules.database.models import AlarmRule, Zone
 from shared.caching.local_cache import LocalCache
 

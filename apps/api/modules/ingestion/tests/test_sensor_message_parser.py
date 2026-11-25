@@ -5,7 +5,7 @@ from datetime import timezone as datetime_timezone
 from django.test import SimpleTestCase
 from django.utils import timezone
 
-from modules.ingestion.parsers.sensor_message_parser import SensorMessageParser
+from modules.ingestion.adapters.messaging.sensor_message_parser import SensorMessageParser
 from shared.messaging import InboundMessage, MessageRejected
 
 TOPIC = "gridd.obs.environmental.temperature"

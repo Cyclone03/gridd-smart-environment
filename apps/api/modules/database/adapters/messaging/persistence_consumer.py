@@ -1,0 +1,75 @@
+import logging
+
+from shared.kernel.events import EventTypes
+from shared.messaging import CommandFailed, EventHandler
+
+logger = logging.getLogger(__name__)
+
+
+class PersistenceConsumer(EventHandler):
+    """Point d'entrée Kafka du module Database.
+
+    Reçoit les événements des topics ``DATABASE_SUBSCRIBED_TOPICS`` et les
+    transmet au service de persistance concerné. Les commandes (événements
+    avec ``reply_to``) reçoivent toujours une réponse, succès ou échec.
+
+    Assemblé par ``modules.database.composition.persistence_consumer``.
+    """
+
+    def __init__(self, *, observations, alerts, predictions, weather_snapshots, rules, replies):
+        self._observations = observations
+        self._alerts = alerts
+        self._predictions = predictions
+        self._weather_snapshots = weather_snapshots
+        self._rules = rules
+        self._replies = replies
+        # Pendant un lot Kafka, les observations sont enregistrées ensemble à la fin.
+        self._batching = False
+        self._pending = []
+
+    def routes(self):
+        return {
+            EventTypes.OBSERVATION_VALIDATED: self._observation,
+            EventTypes.CLIMATE_PREDICTION_GENERATED: lambda event: self._predictions.persist(event),
+            EventTypes.WEATHER_SNAPSHOT_GENERATED: lambda event: self._weather_snapshots.persist(event),
+            EventTypes.ALERT_RAISED: lambda event: self._alerts.raise_alert(event.payload),
+            EventTypes.ALERT_RESOLVED: lambda event: self._alerts.resolve_alert(event.payload),
+            EventTypes.ALARM_STATE_SAVED: lambda event: self._alerts.save_state(event.payload),
+            EventTypes.ALARM_RULE_RESET: lambda event: self._alerts.reset_rule(event.payload),
+            EventTypes.ALARM_RULE_SEVERITY_PROPAGATED: lambda event: self._alerts.propagate_severity(event.payload),
+            EventTypes.ALARM_RULE_CREATE: lambda event: self._command(event, self._rules.create),
+            EventTypes.ALARM_RULE_UPDATE: lambda event: self._command(event, self._rules.update),
+            EventTypes.ALARM_RULE_DELETE: lambda event: self._command(event, self._rules.delete),
+        }
+
+    def begin_batch(self):
+        self._batching = True
+        self._pending = []
+
+    def end_batch(self):
+        """Enregistre en une fois les observations du lot (insertion groupée).
+
+        Une erreur ici fait échouer le lot : il est relu (sans doublon, grâce à
+        ``event_id``) par lots plus petits, voir ``KafkaSubscriptionWorker``.
+        """
+        self._batching = False
+        pending, self._pending = self._pending, []
+        self._observations.persist_many(pending)
+
+    def _observation(self, event):
+        if self._batching:
+            self._pending.append(event.payload)
+        else:
+            self._observations.persist(event.payload)
+
+    def _command(self, event, operation):
+        try:
+            data = operation(event.payload)
+        except CommandFailed as exc:
+            self._replies.failed(event, exc)
+            return
+        except Exception:
+            logger.exception("Échec de la commande %s.", event.type)
+            self._replies.failed(event, CommandFailed(CommandFailed.ERROR, "Erreur lors de l'enregistrement."))
+            return
+        self._replies.succeeded(event, data)

@@ -3,9 +3,9 @@ from datetime import timedelta
 from django.test import SimpleTestCase
 from django.utils import timezone
 
-from modules.ingestion.domain.past_reading import PastReading
-from modules.ingestion.domain.quality_assessor import QualityAssessor
-from modules.ingestion.domain.quality_profile import QualityProfile
+from modules.ingestion.core.domain.past_reading import PastReading
+from modules.ingestion.core.domain.quality_assessor import QualityAssessor
+from modules.ingestion.core.domain.quality_profile import QualityProfile
 
 
 class QualityAssessorTests(SimpleTestCase):

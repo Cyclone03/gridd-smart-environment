@@ -53,10 +53,14 @@ docker compose up -d api
 # À lancer uniquement après vérification du broker et du groupe configurés :
 docker compose up -d kafka-consumer
 docker compose logs -f api kafka-consumer
+# Module IA (image « ia », TensorFlow) :
+docker compose build ai-prediction
+docker compose up -d ai-prediction
+docker compose logs -f ai-prediction
 ```
 
-Le fichier `apps/api/docker-compose.yml` déclare uniquement `api` et
-`kafka-consumer`. Il ne démarre pas PostgreSQL, Redis ou Kafka ; ces services
+Le fichier `apps/api/docker-compose.yml` déclare `api`, `kafka-consumer` et
+`ai-prediction`. Il ne démarre pas PostgreSQL, Redis ou Kafka ; ces services
 doivent déjà être accessibles depuis les conteneurs et configurés dans `.env`.
 `docker compose up -d` démarre aussi le consommateur. Celui-ci utilise les
 groupes configurés et valide les offsets après traitement : vérifier
@@ -67,7 +71,28 @@ environnement partagé, avec l'autorisation nécessaire.
 |---|---|---|
 | `api` | Daphne (ASGI) : REST, WebSocket, admin | santé `GET /api/health/`; monte le certificat capteur; pas de migrations automatiques |
 | `kafka-consumer` | `manage.py run_consumers` | modules `ingestion`, `database`, `alarms`, `realtime`; monte le certificat capteur depuis `apps/api/secrets/` |
+| `ai-prediction` | `manage.py run_ai_predictions` (image `ia`) | module `ia` : lit la base, appelle Open-Meteo, publie sur le bus interne (`EVENT_BUS=kafka` forcé) ; persisté par `kafka-consumer` ; volume `ai-prediction-state` **obligatoire** ; santé `manage.py ai_prediction_healthcheck` |
 | PostgreSQL, Redis, Kafka | Dépendances externes | aucun de ces services n'est défini dans ce Compose |
+
+Les deux images sont construites depuis `apps/api` avec `docker/Dockerfile` :
+`--target api` (défaut, dernière étape) et `--target ia` (même code +
+`requirements-ia.txt`). Le service `ai-prediction` utilise le même
+`apps/api/.env` que l'API : y ajouter les variables `AI_*` et
+`OPEN_METEO_*` (voir `.env.example` et `apps/api/modules/ia/README.md`). Les
+réglages propres à l'image (`AI_ISOLATED_ENVIRONMENT`, `AI_STATE_DIR`, chemins
+du registre et du manifeste) sont fixés dans `environment:` et ne peuvent pas
+être écrasés par le fichier `.env`.
+
+### Mise à jour « un capteur par zone » (migration 0018)
+
+1. Sauvegarder la base (`pg_dump`).
+2. Déployer, puis appliquer les migrations dans le conteneur `api` :
+   `python manage.py migrate`. Les capteurs `environmental-nodeXX` deviennent
+   `<zone>-<mesure>` ; aucune observation n'est supprimée.
+3. Redémarrer `kafka-consumer` (caches de capteurs).
+4. Récupérer les mesures rejetées d'une période, dans `kafka-consumer` :
+   `python manage.py replay_sensor_topics --since <ISO 8601> --dry-run`, puis
+   sans `--dry-run`. Le rejeu est idempotent et peut être relancé.
 
 L'image API :
 

@@ -5,8 +5,8 @@ from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
+from shared.kernel.periods import PeriodParamError
 from shared.messaging import CommandFailed, MessagingUnavailable
-from shared.periods import PeriodParamError
 
 from .service_unavailable import ServiceUnavailable
 

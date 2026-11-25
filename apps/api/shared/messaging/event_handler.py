@@ -1,7 +1,8 @@
 from abc import abstractmethod
 from collections.abc import Callable
 
-from .event import Event
+from shared.kernel.events import Event
+
 from .inbound_message import InboundMessage
 from .message_handler import MessageHandler
 

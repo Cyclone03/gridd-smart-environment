@@ -1,10 +1,10 @@
 import uuid
 
-from shared.contracts.event_types import EventTypes
+from shared.kernel.events import Event
+from shared.kernel.events.event_types import EventTypes
 
 from .command_failed import CommandFailed
 from .command_timeout import CommandTimeout
-from .event import Event
 
 
 class CommandGateway:

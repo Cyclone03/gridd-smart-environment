@@ -3,7 +3,7 @@ import time
 
 from django.test import SimpleTestCase
 
-from shared.contracts.event_types import EventTypes
+from shared.kernel.events.event_types import EventTypes
 from shared.messaging import CommandTimeout, Event
 from shared.messaging.command_gateway import CommandGateway
 from shared.messaging.event_publisher import EventPublisher

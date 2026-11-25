@@ -59,6 +59,18 @@ mesures arrivent au navigateur par Redis. Pour reproduire la production :
 Données réelles : voir [`apps/api/README.md`](../apps/api/README.md#capteurs-réels-kafka-gridd).
 Ne pas lancer le simulateur et Kafka en même temps, sauf mélange volontaire.
 
+Prédictions IA (facultatif, dépendances lourdes) :
+
+```bash
+cd apps/api && . .venv/bin/activate
+pip install -r requirements-ia.txt
+AI_STATE_DIR=./state AI_ISOLATED_ENVIRONMENT=true python manage.py run_ai_predictions --once
+```
+
+Sans les empreintes approuvées des scalers (`AI_APPROVED_SCALER_SHA256`), seul
+l'instantané météo est publié. Voir
+[`apps/api/modules/ia/README.md`](../apps/api/modules/ia/README.md).
+
 ### Sans Docker
 
 ```dotenv

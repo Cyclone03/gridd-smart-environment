@@ -39,6 +39,12 @@ jobs:
         run: python manage.py run_consumers --list
       - name: Tests
         run: python manage.py test --noinput
+      # Le cœur IA n'importe numpy qu'à l'inférence : ses tests de prédiction
+      # sont ignorés ci-dessus et rejoués ici avec numpy (sans TensorFlow).
+      - name: Tests du module IA avec numpy
+        run: |
+          python -m pip install "numpy>=1.26"
+          python manage.py test modules.ia --noinput
 
   web:
     name: Frontend (React)
@@ -67,7 +73,11 @@ jobs:
       - name: Construire l'image du frontend
         run: docker build -t gridd-web:ci apps/web
       - name: Construire l'image de l'API
-        run: docker build -f apps/api/docker/Dockerfile -t gridd-api:ci apps/api
+        run: docker build -f apps/api/docker/Dockerfile --target api -t gridd-api:ci apps/api
+      - name: Construire l'image IA (même code, cible « ia »)
+        run: docker build -f apps/api/docker/Dockerfile --target ia -t gridd-ia:ci apps/api
+      - name: Vérifier que l'image IA démarre Django et lit le manifeste
+        run: docker run --rm -e DJANGO_SECRET_KEY=ci -e DB_ENGINE=sqlite gridd-ia:ci python manage.py check
       - name: Démarrer le frontend seul et vérifier /healthz
         run: |
           docker run -d --name web -p 3000:3000 -e GRIDD_API_URL=https://api.example.org gridd-web:ci

@@ -1,0 +1,232 @@
+name: gridd-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gridd
+      POSTGRES_USER: gridd
+      POSTGRES_PASSWORD: gridd-local-only
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gridd -d gridd"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  kafka:
+    image: apache/kafka:3.9.1
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:19092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "127.0.0.1:19092:19092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: docker/Dockerfile
+      target: api
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        python manage.py migrate --noinput &&
+        python manage.py seed_gridd &&
+        exec daphne -b 0.0.0.0 -p 8000 config.asgi:application
+    environment:
+      DEBUG: "true"
+      ALLOWED_HOSTS: localhost,127.0.0.1,api
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      DB_ENGINE: postgres
+      DB_NAME: gridd
+      DB_USER: gridd
+      DB_PASSWORD: gridd-local-only
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      EVENT_BUS: kafka
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      KAFKA_CONSUMER_GROUP_PREFIX: gridd-local
+      KAFKA_AUTO_CREATE_TOPICS: "true"
+      HEALTH_MAX_DATA_AGE_SECONDS: "600"
+    ports:
+      - "127.0.0.1:8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/admin/login/', timeout=3).close()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  consumers:
+    build:
+      context: ./apps/api
+      dockerfile: docker/Dockerfile
+      target: api
+    env_file:
+      - ./apps/api/.env
+    restart: unless-stopped
+    entrypoint: ["python", "manage.py"]
+    command: ["run_consumers"]
+    environment:
+      DEBUG: "true"
+      ALLOWED_HOSTS: localhost,127.0.0.1,api
+      DB_ENGINE: postgres
+      DB_NAME: gridd
+      DB_USER: gridd
+      DB_PASSWORD: gridd-local-only
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      EVENT_BUS: kafka
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      KAFKA_USERNAME: ""
+      KAFKA_PASSWORD: ""
+      KAFKA_CA_CERT_PATH: ""
+      KAFKA_SENSORS_CA_CERT_PATH: /run/secrets/gridd-kafka-ca.crt
+      KAFKA_CONSUMER_GROUP_PREFIX: gridd-local
+      KAFKA_AUTO_CREATE_TOPICS: "true"
+      KAFKA_CONSUMER_HEARTBEAT_FILE: /tmp/gridd-consumers.heartbeat
+    volumes:
+      - type: bind
+        source: ./apps/api/secret/gridd-kafka-ca.crt
+        target: /run/secrets/gridd-kafka-ca.crt
+        read_only: true
+    depends_on:
+      api:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import pathlib,time,sys; p=pathlib.Path('/tmp/gridd-consumers.heartbeat'); sys.exit(0 if p.exists() and 0 <= time.time()-p.stat().st_mtime < 45 else 1)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  # Module IA (apps/api/modules/ia) : même code que l'API, image « ia »
+  # (TensorFlow). Lit les mesures en base, publie sur Kafka ; les prédictions
+  # sont persistées par le service consumers (module Database).
+  ai-prediction:
+    build:
+      context: ./apps/api
+      dockerfile: docker/Dockerfile
+      target: ia
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 2m
+    command: ["python", "manage.py", "run_ai_predictions"]
+    environment:
+      DEBUG: "true"
+      DB_ENGINE: postgres
+      DB_NAME: gridd
+      DB_USER: gridd
+      DB_PASSWORD: gridd-local-only
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      EVENT_BUS: kafka
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      KAFKA_TOPIC_AI_PREDICTIONS: gridd.backend.ai_prediction.events
+      KAFKA_PUBLISH_TIMEOUT_SECONDS: "10"
+      # Empreintes des 12 scalers après revue de provenance (vide : météo seule).
+      AI_APPROVED_SCALER_SHA256: ""
+      AI_PREDICTION_INTERVAL_SECONDS: "3600"
+      AI_OBSERVATION_SOURCE: database
+      OPEN_METEO_LATITUDE: "45.5088"
+      OPEN_METEO_LONGITUDE: "-73.5878"
+      AI_HTTP_TIMEOUT_SECONDS: "10"
+    volumes:
+      - ai-prediction-state:/var/lib/ai-predictions
+    depends_on:
+      api:
+        condition: service_healthy
+      consumers:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      LOG_REQUESTS: "true"
+      GRIDD_API_URL: http://localhost:8001
+      GRIDD_WS_URL: ws://localhost:8001
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+volumes:
+  postgres-data:
+  redis-data:
+  kafka-data:
+  ai-prediction-state:
