@@ -49,6 +49,11 @@ COPY --from=deps-ia /opt/venv /opt/venv
 COPY --chown=gridd:gridd . .
 
 # État persistant (registre des publications, battement de cœur) : volume.
+# Pas de GPU : évite la recherche des pilotes CUDA et les messages
+# d'initialisation de TensorFlow à chaque cycle (les erreurs restent affichées).
+ENV CUDA_VISIBLE_DEVICES=-1 \
+    TF_CPP_MIN_LOG_LEVEL=2
+
 ENV AI_STATE_DIR=/var/lib/ai-predictions \
     AI_PREDICTION_LEDGER_PATH=/var/lib/ai-predictions/predictions.sqlite3 \
     AI_PREDICTION_HEARTBEAT_PATH=/var/lib/ai-predictions/heartbeat \

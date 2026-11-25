@@ -51,7 +51,6 @@ class PredictionScheduler:
                 if stop_event.is_set():
                     break
 
-                cycle_started = self._monotonic()
                 try:
                     exit_code = self._run_cycle()
                     if exit_code not in (None, 0):
@@ -59,7 +58,10 @@ class PredictionScheduler:
                 except Exception:
                     logger.exception("Prediction cycle failed; the scheduler will retry.")
 
-                next_run = cycle_started + self._settings.interval_seconds
+                # Depuis l'heure *prévue* du cycle (et non son démarrage effectif,
+                # quelques millisecondes plus tard) : sinon l'alignement repoussait
+                # chaque cycle au créneau suivant (toutes les 75 min au lieu de 60).
+                next_run += self._settings.interval_seconds
                 now = self._monotonic()
                 while next_run <= now:
                     next_run += self._settings.interval_seconds
@@ -67,6 +69,8 @@ class PredictionScheduler:
         finally:
             heartbeat_stop.set()
             heartbeat_thread.join(timeout=self._settings.heartbeat_interval_seconds + 1)
+
+    SLOT_TOLERANCE_SECONDS = 1.0
 
     def next_run_after(self, earliest: float) -> float:
         """Instant (horloge monotone) du premier créneau aligné à partir de ``earliest``."""
@@ -77,7 +81,9 @@ class PredictionScheduler:
         now_wall = self._wall_clock()
         earliest_wall = now_wall + max(0.0, earliest - now_monotonic)
         offset = self._settings.align_offset_seconds
-        slot_wall = math.ceil((earliest_wall - offset) / align) * align + offset
+        # Tolérance : un instant prévu exactement sur un créneau peut arriver ici
+        # quelques microsecondes après (conversion horloge monotone / murale).
+        slot_wall = math.ceil((earliest_wall - offset - self.SLOT_TOLERANCE_SECONDS) / align) * align + offset
         logger.info(
             "Next prediction cycle at %s UTC.",
             time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(slot_wall)),
