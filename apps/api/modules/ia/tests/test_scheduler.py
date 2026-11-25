@@ -2,6 +2,7 @@ import threading
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import Mock
 
 from django.test import SimpleTestCase, override_settings
 
@@ -100,6 +101,42 @@ class SchedulerAlignmentTests(SimpleTestCase):
         with self.assertLogs("modules.ia.core.services.prediction_scheduler", level="INFO"):
             self.assertAlmostEqual(scheduler.next_run_after(1000.0), 1000.0)
             self.assertAlmostEqual(scheduler.next_run_after(1000.0 + 3600), 1000.0 + 3600)
+
+    def test_an_instant_just_past_a_slot_keeps_that_slot(self):
+        slot = 1_795_623_300.0 + 60
+        scheduler = self.scheduler(wall_now=slot + 0.05)
+        with self.assertLogs("modules.ia.core.services.prediction_scheduler", level="INFO"):
+            self.assertAlmostEqual(scheduler.next_run_after(1000.0), 1000.0 - 0.05)
+
+    def test_hourly_cycles_stay_on_the_same_slot(self):
+        """Régression : 18:46 puis 20:01 au lieu de 19:46."""
+        wall = [1_795_623_300.0 + 60 - 0.5]  # 0,5 s avant le créneau
+        clock = {"mono": 1000.0}
+        starts = []
+
+        def run_cycle():
+            starts.append(clock["mono"])
+            clock["mono"] += 5  # durée du cycle
+            if len(starts) == 2:
+                stop.set()
+            return 0
+
+        stop = threading.Event()
+        # Le réveil arrive toujours un peu après l'heure prévue (10 ms).
+        stop.wait = lambda delay: clock.__setitem__("mono", clock["mono"] + delay + 0.01) or stop.is_set()
+        scheduler = PredictionScheduler(
+            run_cycle,
+            SchedulerSettings(interval_seconds=3600, align_seconds=900, align_offset_seconds=60,
+                heartbeat_interval_seconds=3600, heartbeat_max_age_seconds=7200,
+            ),
+            Mock(),
+            monotonic=lambda: clock["mono"],
+            wall_clock=lambda: wall[0] + (clock["mono"] - 1000.0),
+        )
+        with self.assertLogs("modules.ia.core.services.prediction_scheduler", level="INFO"):
+            scheduler.run(stop)
+
+        self.assertAlmostEqual(starts[1] - starts[0], 3600, places=1)
 
     def test_alignment_settings_are_validated(self):
         with self.assertRaises(ValueError):
