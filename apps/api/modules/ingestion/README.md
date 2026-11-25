@@ -16,6 +16,9 @@ La zone est lue dans les métadonnées du message (`zone` objet ou chaîne,
 pas sa zone est placé grâce à `GRIDD_NODE_ZONES` (`node01=open-workspace,…`) ;
 sinon la mesure est rejetée (« zone absente »). Le `node_id` n'est jamais pris
 comme code de zone : cela créait un espace par nœud (node01, node02…).
+La caméra d'occupation (`occupancy-camera`) compte les personnes du
+laboratoire entier : `occupancy-camera=gridd` (zone « Laboratoire GRIDD »,
+créée par `seed_gridd`).
 
 ## Contrat
 

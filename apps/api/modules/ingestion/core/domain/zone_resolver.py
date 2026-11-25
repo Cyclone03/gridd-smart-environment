@@ -23,6 +23,7 @@ class ZoneResolver:
         "professors-office": ZoneType.OFFICE,
         "meeting-room": ZoneType.MEETING_ROOM,
         "open-workspace": ZoneType.OPEN_WORKSPACE,
+        "gridd": ZoneType.LAB,
     }
     TYPES_BY_PREFIX = (("individual-work-cubicle", ZoneType.CUBICLE),)
     CODE_KEYS = ("zone_id", "zoneId", "zone_code", "zoneCode")

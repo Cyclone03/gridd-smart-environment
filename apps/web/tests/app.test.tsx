@@ -10,11 +10,12 @@ describe("routes et vues principales", () => {
     renderApp("/");
     expect(await screen.findByRole("heading", { name: "État environnemental du laboratoire" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText("22,4 °C").length).toBeGreaterThan(0));
-    expect(screen.getByText("Espaces suivis").nextSibling).toHaveTextContent("1");
+    expect(screen.getByText("Espaces suivis").nextSibling).toHaveTextContent("2");
+    // Occupation du laboratoire : 6 personnes sur une capacité de 30.
+    expect(screen.getByText("Occupation du laboratoire").nextSibling).toHaveTextContent("6 pers.");
+    expect(screen.getByText("20 % de la capacité")).toBeInTheDocument();
     expect(screen.queryByText("Confort thermique")).not.toBeInTheDocument();
     expect(screen.queryByText("Énergie estimée (24 h)")).not.toBeInTheDocument();
-    expect(screen.queryByText("Nombre de personnes dans le GRIDD")).not.toBeInTheDocument();
-    expect(screen.queryByText("Taux d'occupation")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Confort" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Énergie" })).not.toBeInTheDocument();
     expect(document.title).toBe("Vue d'ensemble · GRIDD");
@@ -25,8 +26,12 @@ describe("routes et vues principales", () => {
     renderApp("/spaces");
     const card = (await screen.findByRole("heading", { name: "Salle de réunion" })).closest("article")!;
     expect(within(card).getByText("Température")).toBeInTheDocument();
-    expect(within(card).queryByText("Présence")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "GRIDD" })).not.toBeInTheDocument();
+    expect(within(card).queryByText("Occupation")).not.toBeInTheDocument();
+    const lab = screen.getByRole("heading", { name: "Laboratoire GRIDD" }).closest("article")!;
+    expect(within(lab).getByText("Occupation")).toBeInTheDocument();
+    expect(within(lab).getByText("6")).toBeInTheDocument();
+    // Pas de modèle IA pour le laboratoire entier : pas de prévision intérieure.
+    expect(within(lab).queryByText("Prévision intérieure")).not.toBeInTheDocument();
   });
 
   it("affiche météo extérieure et prévision de l'espace sans météo H+1", async () => {
@@ -47,13 +52,12 @@ describe("routes et vues principales", () => {
     expect(within(card).getAllByText("Indisponible").length).toBeGreaterThan(0);
   });
 
-  it("n'affiche pas l'occupation dans un espace même si l'API la renvoie", async () => {
+  it("affiche l'occupation dans tout espace équipé d'un compteur", async () => {
     const zone = { ...zones[0], metrics: [...zones[0].metrics, "occupancy" as const] };
     dashboardApi(undefined, { zones: [zone] });
     renderApp("/spaces");
     const card = (await screen.findByRole("heading", { name: "Salle de réunion" })).closest("article")!;
-    expect(within(card).queryByText("Présence")).not.toBeInTheDocument();
-    expect(within(card).queryByText("Occupation")).not.toBeInTheDocument();
+    expect(within(card).getByText("Occupation")).toBeInTheDocument();
   });
 
   it("navigue entre les vues depuis la barre principale", async () => {

@@ -15,12 +15,12 @@ export const METRIC_VISUALS: Record<MetricType, MetricVisual> = {
   temperature: { label: "Température", shortLabel: "Température", icon: Thermometer, color: "#d98519", decimals: 1 },
   humidity: { label: "Humidité", shortLabel: "Humidité", icon: Droplets, color: "#2184a7", decimals: 1 },
   sound_level: { label: "Niveau sonore", shortLabel: "Son", icon: Volume2, color: "#7259bd", decimals: 1 },
-  occupancy: { label: "Occupation", shortLabel: "Présence", icon: Users, color: "#c55d45", decimals: 0 },
+  occupancy: { label: "Occupation", shortLabel: "Occupation", icon: Users, color: "#c55d45", decimals: 0 },
   co2: { label: "CO₂", shortLabel: "CO₂", icon: Wind, color: "#4c7a3d", decimals: 0 },
 };
 
 /** Ordre d'affichage des mesures suivies par l'interface. */
-export const DISPLAY_METRICS: DisplayMetric[] = ["temperature", "humidity", "sound_level"];
+export const DISPLAY_METRICS: DisplayMetric[] = ["temperature", "humidity", "sound_level", "occupancy"];
 
 /** Unités canoniques, utilisées quand une mesure n'a pas encore de valeur. */
 export const METRIC_UNITS: Record<MetricType, string> = {

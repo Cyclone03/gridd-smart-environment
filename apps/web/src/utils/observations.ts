@@ -63,6 +63,12 @@ export function averageLatest(zones: Zone[], latest: LatestReadings, metric: Met
   };
 }
 
+/** Somme des dernières valeurs (ex. personnes présentes), mêmes règles que ``averageLatest``. */
+export function totalLatest(zones: Zone[], latest: LatestReadings, metric: MetricType, now?: number) {
+  const average = averageLatest(zones, latest, metric, now);
+  return { ...average, value: average.value == null ? null : average.value * average.count };
+}
+
 export function visibleZones(zones: Zone[]): Zone[] {
   return zones.filter((zone) => !HIDDEN_ZONE_NAMES.has(zone.name));
 }

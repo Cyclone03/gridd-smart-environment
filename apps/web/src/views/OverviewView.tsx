@@ -1,4 +1,4 @@
-import { Activity, Building2, Droplets, Thermometer, Volume2 } from "lucide-react";
+import { Activity, Building2, Droplets, Thermometer, Users, Volume2 } from "lucide-react";
 import { SummaryCard } from "../components/common/SummaryCard";
 import { ClimatePredictions } from "../components/dashboard/ClimatePredictions";
 import { useNow } from "../composables/useNow";
@@ -6,8 +6,8 @@ import { SITE_LABEL } from "../constants/app";
 import { DISPLAY_METRICS, isDisplayMetric, METRIC_VISUALS } from "../constants/metrics";
 import { useDashboard } from "../stores/dashboardStore";
 import { formatLongDate, formatReadingTime, formatValue } from "../utils/format";
-import { soundComfortIndex } from "../utils/indicators";
-import { averageLatest, isFresh, readingKey } from "../utils/observations";
+import { occupancyRate, soundComfortIndex } from "../utils/indicators";
+import { averageLatest, isFresh, readingKey, totalLatest } from "../utils/observations";
 
 /** Vue d'ensemble : synthèse des dernières mesures de tous les espaces. */
 export function OverviewView() {
@@ -18,6 +18,8 @@ export function OverviewView() {
   const temperature = averageLatest(visibleZones, latest, "temperature", now);
   const humidity = averageLatest(visibleZones, latest, "humidity", now);
   const sound = averageLatest(visibleZones, latest, "sound_level", now);
+  // Personnes présentes : somme des comptages à jour (caméra du laboratoire).
+  const occupancy = totalLatest(visibleZones, latest, "occupancy", now);
   const coverage = (stat: { count: number; expected: number }) => `${stat.count}/${stat.expected} espaces à jour`;
 
   return (
@@ -64,6 +66,13 @@ export function OverviewView() {
           detail={coverage(sound)}
           icon={Volume2}
           tone="violet"
+        />
+        <SummaryCard
+          label="Occupation du laboratoire"
+          value={occupancy.value == null ? "—" : `${formatValue(occupancy.value, "occupancy")} pers.`}
+          detail={occupancy.value == null ? coverage(occupancy) : `${occupancyRate(occupancy.value)} % de la capacité`}
+          icon={Users}
+          tone="red"
         />
         <SummaryCard
           label="Indice de confort sonore"

@@ -33,6 +33,9 @@ export function ZoneCard({
   // qui n'arrivent plus au serveur.
   const silent = newest != null && now - Date.parse(newest) > STALE_READING_MS;
   const { climatePredictions, climatePredictionsLoading } = useDashboard();
+  // Prévision IA seulement pour les espaces qui ont un modèle (pas le
+  // laboratoire entier, suivi pour son occupation).
+  const hasPrediction = isClimatePredictionZoneCode(zone.code);
   const prediction = isClimatePredictionZoneCode(zone.code) ? climatePredictions.get(zone.code) : undefined;
   const upcomingPrediction = prediction && Date.parse(prediction.target_at) > now ? prediction : undefined;
 
@@ -65,28 +68,30 @@ export function ZoneCard({
       </div>
       <section className="zone-climate">
         <OutdoorWeather compact />
-        <div className="zone-prediction">
-          <h4>Prévision intérieure</h4>
-          <div className="zone-prediction-values">
-            <p>
-              <span>Température prévue</span>
-              <strong>
-                {upcomingPrediction ? `${formatValue(upcomingPrediction.predicted_temperature_c, "temperature")} °C` : "—"}
-              </strong>
-            </p>
-            <p>
-              <span>Humidité prévue</span>
-              <strong>
-                {upcomingPrediction ? `${formatValue(upcomingPrediction.predicted_humidity_percent, "humidity")} %` : "—"}
-              </strong>
-            </p>
+        {hasPrediction && (
+          <div className="zone-prediction">
+            <h4>Prévision intérieure</h4>
+            <div className="zone-prediction-values">
+              <p>
+                <span>Température prévue</span>
+                <strong>
+                  {upcomingPrediction ? `${formatValue(upcomingPrediction.predicted_temperature_c, "temperature")} °C` : "—"}
+                </strong>
+              </p>
+              <p>
+                <span>Humidité prévue</span>
+                <strong>
+                  {upcomingPrediction ? `${formatValue(upcomingPrediction.predicted_humidity_percent, "humidity")} %` : "—"}
+                </strong>
+              </p>
+            </div>
+            {upcomingPrediction ? (
+              <small>Pour le {formatDateTime(upcomingPrediction.target_at)}</small>
+            ) : (
+              <small>{climatePredictionsLoading ? "Chargement…" : "Indisponible"}</small>
+            )}
           </div>
-          {upcomingPrediction ? (
-            <small>Pour le {formatDateTime(upcomingPrediction.target_at)}</small>
-          ) : (
-            <small>{climatePredictionsLoading ? "Chargement…" : "Indisponible"}</small>
-          )}
-        </div>
+        )}
       </section>
       <div className="zone-card-foot">
         <span>Dernière mesure : {formatReadingTime(newest, new Date(now))}</span>

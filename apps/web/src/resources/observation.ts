@@ -8,7 +8,7 @@
 export type MetricType = "temperature" | "humidity" | "co2" | "sound_level" | "occupancy";
 
 /** Types affichés dans les espaces (CO₂ et occupation ne sont pas déployés ici). */
-export type DisplayMetric = Exclude<MetricType, "co2" | "occupancy">;
+export type DisplayMetric = Exclude<MetricType, "co2">;
 
 export type QualityStatus = "normal" | "suspicious" | "invalid";
 

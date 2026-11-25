@@ -17,6 +17,9 @@ class Command(BaseCommand):
         ("Espace de travail ouvert", "open-workspace", Zone.ZoneType.OPEN_WORKSPACE),
         ("Salle de réunion", "meeting-room", Zone.ZoneType.MEETING_ROOM),
         ("Salle des serveurs et équipements", "server-equipment-room", Zone.ZoneType.SERVER_ROOM),
+        # Laboratoire entier : occupation mesurée par la caméra GRIDD
+        # (GRIDD_NODE_ZONES=occupancy-camera=gridd), capacité de référence 30.
+        ("Laboratoire GRIDD", "gridd", Zone.ZoneType.LAB),
     ]
 
     SENSORS = [
@@ -30,6 +33,9 @@ class Command(BaseCommand):
         "server-equipment-room": [
             ("temperature", "°C"),
             ("humidity", "%"),
+        ],
+        "gridd": [
+            ("occupancy", "person"),
         ],
     }
 
@@ -57,7 +63,9 @@ class Command(BaseCommand):
                 self._seed_sensor(zone, name, sensor_type, unit)
             configured_types = {sensor_type for sensor_type, _ in sensors}
             unused = [sensor_type for sensor_type, _ in self.SENSORS if sensor_type not in configured_types]
-            for sensor_type in [*unused, "occupancy"]:
+            if "occupancy" not in configured_types:
+                unused.append("occupancy")
+            for sensor_type in unused:
                 # Capteurs de démonstration sans aucune mesure : désactivés. Un
                 # capteur qui reçoit des mesures réelles n'est jamais désactivé.
                 Sensor.objects.filter(
