@@ -10,7 +10,6 @@ services:
     env_file:
       - apps/ai-prediction/.env
     volumes:
-      - ai-prediction-state:/var/lib/ai-predictions
       - ../files/gridd-kafka-ca.crt:/app/secrets/gridd-kafka-ca.crt:ro
     networks:
       - dokploy-network
@@ -18,6 +17,3 @@ services:
 networks:
   dokploy-network:
     external: true
-
-volumes:
-  ai-prediction-state:
