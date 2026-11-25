@@ -111,9 +111,10 @@ class PersistenceConsumerTests(TestCase):
         self.assertEqual(len(self.published(EventTypes.ZONES_CHANGED)), 1)
         deliver("n1")  # rien de nouveau
         self.assertEqual(len(self.published(EventTypes.ZONES_CHANGED)), 1)
-        deliver("n2")  # nouveau capteur
+        deliver("n2")  # autre nœud, même capteur (zone + mesure) : rien de nouveau
+        self.assertEqual(len(self.published(EventTypes.ZONES_CHANGED)), 1)
         deliver("n2", name="Salle B")  # zone renommée
-        self.assertEqual(len(self.published(EventTypes.ZONES_CHANGED)), 3)
+        self.assertEqual(len(self.published(EventTypes.ZONES_CHANGED)), 2)
         self.assertEqual(self.published(EventTypes.ZONES_CHANGED)[0].payload, {"zone_code": "salle"})
 
     def test_redelivered_observation_is_persisted_once(self):

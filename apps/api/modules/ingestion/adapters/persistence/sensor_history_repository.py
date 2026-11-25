@@ -8,9 +8,9 @@ class SensorHistoryRepository:
     Source en base de ``SensorHistoryStore`` (adaptateur du port ``SensorHistory``).
     """
 
-    def recent(self, node_id, metric, limit) -> list[PastReading]:
+    def recent(self, sensor, metric, limit) -> list[PastReading]:
         rows = (
-            Observation.objects.filter(sensor__node_id=node_id, sensor__sensor_type=metric)
+            Observation.objects.filter(sensor__node_id=sensor, sensor__sensor_type=metric)
             .order_by("-observed_at", "-received_at")
             .values("value", "observed_at", "received_at")[:limit]
         )

@@ -8,9 +8,9 @@ class SensorRepository:
     Adaptateur du port ``KnownSensorReader``.
     """
 
-    def find(self, node_id, metric) -> KnownSensor | None:
+    def find(self, sensor, metric) -> KnownSensor | None:
         row = (
-            Sensor.objects.filter(node_id=node_id, sensor_type=metric)
+            Sensor.objects.filter(node_id=sensor, sensor_type=metric)
             .values("zone__code", "unit", "active")
             .first()
         )

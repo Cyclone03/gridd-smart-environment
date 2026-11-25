@@ -1,11 +1,13 @@
 from modules.ingestion.core.domain.past_reading import PastReading
+from shared.kernel.sensor_identity import sensor_key
 
 
 class IngestionService:
     """Logique métier de l'ingestion d'une mesure capteur.
 
-    1. rattachement à une zone (déduite des métadonnées du capteur) ;
-    2. cohérence avec le capteur connu (zone, unité, activation) et le type ;
+    1. rattachement à une zone (déduite des métadonnées du message) ;
+    2. cohérence avec le capteur de la zone pour cette mesure (unité,
+       activation) et avec le type ;
     3. contrôle de qualité (valeur impossible, capteur bloqué, variation rapide) ;
     4. publication de l'observation validée — sa persistance est assurée par
        le module Database.
@@ -27,13 +29,15 @@ class IngestionService:
 
     def ingest(self, reading) -> dict:
         zone = self._zone_resolver.resolve(reading.source_metadata, reading.node_id)
-        value = self._validator.validate(reading, zone.code, self._sensors.find(reading.node_id, reading.metric))
+        # Un capteur par zone et par mesure : le nœud physique peut changer.
+        sensor = sensor_key(zone.code, reading.metric)
+        value = self._validator.validate(reading, zone.code, self._sensors.find(sensor, reading.metric))
         quality = self._assessor.assess(
             metric=reading.metric,
             value=value,
             observed_at=reading.observed_at,
             now=reading.received_at,
-            history=self._history.recent(reading.node_id, reading.metric),
+            history=self._history.recent(sensor, reading.metric),
             profile=self._profiles.for_zone(zone.code),
         )
 
@@ -52,5 +56,5 @@ class IngestionService:
             "zone": {"code": zone.code, "name": zone.name, "type": zone.zone_type},
         }
         self._producer.publish(payload)
-        self._history.record(reading.node_id, reading.metric, PastReading(value, reading.observed_at, reading.received_at))
+        self._history.record(sensor, reading.metric, PastReading(value, reading.observed_at, reading.received_at))
         return payload

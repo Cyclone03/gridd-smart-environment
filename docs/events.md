@@ -36,7 +36,9 @@ Inchangé par rapport à la version précédente :
 }
 ```
 
-`nodeId`, `observed_at` et `observedAt` sont aussi acceptés. Sans horodatage,
+`nodeId`, `observed_at` et `observedAt` sont aussi acceptés. Le capteur
+enregistré est celui de la zone pour cette mesure (`<zone>-<mesure>`) ; le
+`node_id` n'est qu'une provenance : un nœud déplacé alimente sa nouvelle zone. Sans horodatage,
 celui du broker est utilisé. Un message invalide est journalisé puis ignoré.
 
 ## Enveloppe des événements internes

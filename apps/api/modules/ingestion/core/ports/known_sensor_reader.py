@@ -4,6 +4,7 @@ from modules.ingestion.core.domain.known_sensor import KnownSensor
 
 
 class KnownSensorReader(Protocol):
-    """Capteur déjà enregistré pour ``(node_id, type)``, ou ``None``."""
+    """Capteur déjà enregistré, ou ``None``. ``sensor`` : identifiant zone +
+    mesure (``shared.kernel.sensor_identity.sensor_key``)."""
 
-    def find(self, node_id, metric) -> KnownSensor | None: ...
+    def find(self, sensor, metric) -> KnownSensor | None: ...

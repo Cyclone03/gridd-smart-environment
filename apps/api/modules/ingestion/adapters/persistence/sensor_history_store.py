@@ -16,16 +16,16 @@ class SensorHistoryStore:
         self._repository = repository
         self._cache = cache
 
-    def recent(self, node_id, metric):
-        key = (node_id, metric)
+    def recent(self, sensor, metric):
+        key = (sensor, metric)
         history = self._cache.get(key)
         if history is None:
-            history = self._repository.recent(node_id, metric, self.LIMIT)
+            history = self._repository.recent(sensor, metric, self.LIMIT)
             self._cache.put(key, history)
         return list(history)
 
-    def record(self, node_id, metric, reading):
-        key = (node_id, metric)
+    def record(self, sensor, metric, reading):
+        key = (sensor, metric)
         if not self._cache.contains(key):
             return
         history = sorted([reading, *self._cache.get(key)], key=lambda item: item.moment, reverse=True)

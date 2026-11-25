@@ -1,11 +1,12 @@
+from shared.kernel.sensor_identity import sensor_key
 
 
 class ObservationPersistenceService:
     """Enregistre les observations validées (avec leur zone et leur capteur)
     puis publie ``observation.persisted`` pour les modules en aval.
 
-    Publie aussi ``zones.changed`` lorsqu'une zone ou un capteur apparaît, qu'un
-    capteur change de zone (ou qu'une zone est renommée) : les tableaux de bord reçoivent alors la
+    Publie aussi ``zones.changed`` lorsqu'une zone ou un capteur apparaît (ou
+    qu'une zone est renommée) : les tableaux de bord reçoivent alors la
     nouvelle liste des zones et de leurs mesures sans la redemander.
 
     Débit : ``persist_many`` enregistre un lot en une transaction (recherche
@@ -42,8 +43,8 @@ class ObservationPersistenceService:
                 items = []
                 for payload in payloads:
                     zone, zone_changed = self._zone(payload["zone"])
-                    sensor, sensor_changed = self._sensor(payload, zone)
-                    if (zone_changed or sensor_changed) and zone.code not in changed_zones:
+                    sensor, sensor_created = self._sensor(payload, zone)
+                    if (zone_changed or sensor_created) and zone.code not in changed_zones:
                         changed_zones.append(zone.code)
                     items.append((payload, zone, sensor))
                 created = self._observation_writer.create_many(items)
@@ -75,14 +76,16 @@ class ObservationPersistenceService:
         return zone, changed
 
     def _sensor(self, payload, zone):
-        metadata = payload.get("sensor_metadata") or {}
-        key = (payload["node_id"], payload["metric"])
+        # Un capteur par zone et par mesure ; le nœud GRIDD qui a envoyé la
+        # mesure est gardé comme provenance (il peut être déplacé ou renommé).
+        metadata = {**(payload.get("sensor_metadata") or {}), "source_node_id": payload["node_id"]}
+        key = sensor_key(zone.code, payload["metric"])
         cached = self._sensors.get(key) if self._cache_references else None
         stable = self._sensor_writer.stable_metadata(metadata)
         if cached is not None and cached[1] == stable and cached[0].zone_id == zone.pk:
             return cached[0], False
         sensor, created = self._sensor_writer.upsert(
-            node_id=payload["node_id"], metric=payload["metric"], unit=payload["unit"], zone=zone, metadata=metadata
+            sensor=key, metric=payload["metric"], unit=payload["unit"], zone=zone, metadata=metadata
         )
         self._remember(self._sensors, key, (sensor, stable))
         return sensor, created

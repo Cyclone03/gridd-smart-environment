@@ -14,6 +14,13 @@ modules, puis publie les faits persistés.
 | Commande | `python manage.py seed_gridd` (zones GRIDD) |
 | Admin | `/admin/` |
 
+Capteurs : **un par zone et par mesure** (`<zone>-<mesure>`), créés à la
+première mesure ou par `seed_gridd` ; le nœud GRIDD d'origine est gardé dans
+`metadata.source_node_id`. La migration `0018_sensor_per_zone_and_metric`
+convertit les anciens capteurs par nœud (`environmental-node03`…) : chaque
+observation est rattachée au capteur de sa propre zone, puis les anciens
+capteurs sont supprimés (aucune observation supprimée).
+
 Les autres modules lisent `modules.database.models` **depuis leurs
 adaptateurs uniquement** : c'est le schéma partagé, en lecture seule.
 

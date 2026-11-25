@@ -189,8 +189,8 @@ HH:16–19, HH:31–34, HH:46–49).
 
 Aucune mesure récente (moins de 10 minutes) pour la zone : le capteur
 n'émet plus, ou ses mesures sont rejetées par l'ingestion (voir les journaux
-`[ingestion] message rejeté` du service `kafka-consumer`). Un capteur qui
-change de zone est rattaché automatiquement à sa nouvelle zone.
+`[ingestion] message rejeté` du service `kafka-consumer`). Les mesures
+manquantes d'une période se récupèrent avec `replay_sensor_topics`.
 
 ### `Artifact loading requires an isolated environment`
 

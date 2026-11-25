@@ -83,6 +83,17 @@ réglages propres à l'image (`AI_ISOLATED_ENVIRONMENT`, `AI_STATE_DIR`, chemins
 du registre et du manifeste) sont fixés dans `environment:` et ne peuvent pas
 être écrasés par le fichier `.env`.
 
+### Mise à jour « un capteur par zone » (migration 0018)
+
+1. Sauvegarder la base (`pg_dump`).
+2. Déployer, puis appliquer les migrations dans le conteneur `api` :
+   `python manage.py migrate`. Les capteurs `environmental-nodeXX` deviennent
+   `<zone>-<mesure>` ; aucune observation n'est supprimée.
+3. Redémarrer `kafka-consumer` (caches de capteurs).
+4. Récupérer les mesures rejetées d'une période, dans `kafka-consumer` :
+   `python manage.py replay_sensor_topics --since <ISO 8601> --dry-run`, puis
+   sans `--dry-run`. Le rejeu est idempotent et peut être relancé.
+
 L'image API :
 
 - installe les dépendances dans un environnement virtuel, étape séparée ;
