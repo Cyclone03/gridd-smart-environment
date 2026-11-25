@@ -14,7 +14,7 @@ dépendances, sa configuration, son Dockerfile et son cycle de déploiement :
 | Application | Dossier | Technologies | Rôle |
 |---|---|---|---|
 | Frontend | [`apps/web/`](apps/web/README.md) | React 19, TypeScript, Vite, React Router, Recharts, serveur Node.js | Interface de consultation et de configuration |
-| API | [`apps/api/`](apps/api/README.md) | Django 5/6, Django REST Framework, Channels, PostgreSQL, Redis, Kafka | Modules autonomes reliés par Kafka : ingestion, persistance, alarmes, temps réel, API REST et WebSocket |
+| API | [`apps/api/`](apps/api/README.md) | Django 5/6, Django REST Framework, Channels, PostgreSQL, Redis, Kafka ; TensorFlow (image IA) | Modules autonomes et réutilisables reliés par Kafka : ingestion, persistance, alarmes, temps réel, prédictions IA, API REST et WebSocket |
 
 Elles communiquent **uniquement** par l'API documentée dans
 [`docs/api.md`](docs/api.md) : REST sous `/api/`, temps réel sur `/ws/dashboard/`.
@@ -41,12 +41,13 @@ gridd/
 │   │   └── Dockerfile · docker-compose.yml · .env.example
 │   └── api/             # API Django (voir apps/api/README.md)
 │       ├── config/      # paramètres, routage HTTP et WebSocket
-│       ├── shared/      # noyau commun : messagerie Kafka, contrats, HTTP
-│       ├── modules/     # database, ingestion, alarms, observations,
-│       │                # history, realtime, health, simulator
+│       ├── shared/      # kernel/ (noyau pur) + messagerie Kafka, topics, HTTP
+│       ├── modules/     # database, ingestion, alarms, observations, history,
+│       │                # realtime, health, simulator, ia — chacun : core/
+│       │                # (Python pur) + adapters/ + composition.py + README.md
 │       ├── tests/       # règles d'architecture, routage
-│       ├── docker/      # point d'entrée du conteneur
-│       └── Dockerfile · docker-compose.yml · .env.example
+│       ├── docker/      # Dockerfile (cibles « api » et « ia »), point d'entrée
+│       └── docker-compose.yml · .env.example · requirements(-ia).txt
 ├── docs/                # documentation technique
 └── .github/workflows/   # intégration continue
 ```
@@ -61,7 +62,8 @@ docker compose up --build -d
 ```
 
 Elle démarre PostgreSQL local (volume dédié), Redis, Kafka KRaft, l'API Django
-(migrations et zones de base), les consommateurs Kafka, le worker IA et le
+(migrations et zones de base), les consommateurs Kafka, le module IA
+(`apps/api/modules/ia`, image `ia`) et le
 dashboard React. Les événements internes restent sur le Kafka local. Le
 conteneur `consumers` lit les paramètres du broker des capteurs dans le vrai
 fichier [`apps/api/.env`](apps/api/.env) et monte son certificat depuis

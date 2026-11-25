@@ -68,7 +68,7 @@ class IngestionPipelineTests(TestCase):
                 self.events.append((group, event))
 
         channel_layer = ChannelLayer()
-        with patch("modules.realtime.services.realtime_broadcaster.get_channel_layer", return_value=channel_layer):
+        with patch("modules.realtime.adapters.websocket.realtime_broadcaster.get_channel_layer", return_value=channel_layer):
             observation = self.ingest(22.5)
 
         created = [(group, event) for group, event in channel_layer.events if event["type"] == "observation.created"]

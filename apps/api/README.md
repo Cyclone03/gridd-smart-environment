@@ -25,37 +25,51 @@ Topics et événements : [`docs/events.md`](../../docs/events.md).
 
 ```text
 config/                 settings.py, urls.py (routage HTTP), asgi.py (routage WebSocket)
-shared/                 noyau commun — pas un module métier
-├── messaging/          enveloppe d'événement, bus Kafka / mémoire, consommateurs, requête-réponse
-├── contracts/          noms des topics, types d'événements
-├── metrics/            catalogue des mesures et opérateurs
-├── periods/            périodes d'analyse (start/end, granularité, créneaux)
-├── http/               format d'erreur, permissions de lecture publique
+shared/
+├── kernel/             noyau pur (bibliothèque standard) : événements, catalogue des
+│                       mesures, périodes, statuts partagés, horodatages
+├── messaging/          bus Kafka / mémoire, consommateurs, requête-réponse
+├── contracts/          noms des topics (réglages)
+├── http/               format d'erreur
 ├── caching/            vue locale activable (cohérence avec Kafka)
 └── management/commands/run_consumers.py
+modules/<module>/       un module autonome et réutilisable :
+├── README.md           contrat d'intégration (rôle, ports, événements, endpoints, réglages)
+├── apps.py             déclaration Django + abonnements Kafka
+├── composition.py      assemble le cœur et les adaptateurs
+├── core/               Python pur : domain/, ports/, services/
+├── adapters/           persistence/, messaging/, http/, websocket/…
+└── tests/
 modules/
-├── database/           models/, migrations/, admin/, writers/, services/, consumers/, producers/
-├── ingestion/          parsers/, domain/ (validation, qualité), repositories/, stores/, services/, consumers/, producers/
-├── alarms/             controllers/, serializers/, services/, domain/ (moteur), repositories/, stores/, consumers/, producers/
+├── database/           seul à écrire : models/, migrations/, admin/ + persistance des événements
+├── ingestion/          validation et qualité des mesures capteurs
+├── alarms/             règles, moteur d'évaluation, alertes
 ├── observations/       zones, capteurs, mesures (lecture)
 ├── history/            historique agrégé (lecture)
 ├── realtime/           WebSocket et diffusion
 ├── health/             contrôle de santé
-└── simulator/          capteurs simulés
-tests/                  règles d'architecture, routage, utilitaires de test
-docker/entrypoint.sh
+├── simulator/          capteurs simulés
+└── ia/                 prédictions climatiques H+1 (image Docker « ia »)
+tests/                  règles d'architecture, routage, vocabulaire partagé
+docker/Dockerfile       cibles « api » (défaut) et « ia »
+requirements-ia.txt     dépendances d'inférence (TensorFlow, scikit-learn), image « ia » seulement
 ```
 
-Règles (vérifiées par `tests/test_architecture.py`) : une classe par fichier,
-aucun import entre modules (hors `shared` et lecture de
-`modules.database.models`), aucune écriture en base hors de `database`,
-contrôleurs sans accès aux données.
+Règles (vérifiées par `tests/test_architecture.py`) : une classe par fichier ;
+le cœur d'un module n'importe ni Django, ni DRF, ni Channels, ni Kafka, ni un
+autre module, ni l'infrastructure `shared` (seulement `shared.kernel`) ;
+`shared.kernel` n'importe que la bibliothèque standard ; aucun import entre
+modules (hors lecture de `modules.database.models` depuis les adaptateurs) ;
+aucune écriture en base hors de `database` ; contrôleurs sans accès aux
+données ; chaque module a `README.md`, `apps.py`, `composition.py`, `core/` et
+`adapters/`. Voir [`docs/architecture.md`](../../docs/architecture.md).
 
 ## Installation locale
 
 PostgreSQL et Redis doivent être démarrés séparément et leurs adresses
 configurées dans `.env`. Le fichier Compose de l'API ne fournit pas ces
-dépendances : il ne déclare que l'API et le consommateur Kafka.
+dépendances : il déclare l'API, le consommateur Kafka et le module IA
+(`ai-prediction`, image `ia`).
 
 ```bash
 cd apps/api

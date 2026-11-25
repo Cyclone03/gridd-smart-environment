@@ -3,10 +3,10 @@ from datetime import timedelta
 from django.test import SimpleTestCase
 from django.utils import timezone
 
-from modules.alarms.domain.alarm_state_machine import AlarmStateMachine
-from modules.alarms.domain.condition_evaluator import ConditionEvaluator
-from modules.alarms.domain.condition_formatter import ConditionFormatter
-from modules.alarms.domain.rule_change_policy import RuleChangePolicy
+from modules.alarms.core.domain.alarm_state_machine import AlarmStateMachine
+from modules.alarms.core.domain.condition_evaluator import ConditionEvaluator
+from modules.alarms.core.domain.condition_formatter import ConditionFormatter
+from modules.alarms.core.domain.rule_change_policy import RuleChangePolicy
 from modules.database.models import AlarmRuleState, Alert
 
 Status = AlarmRuleState.Status

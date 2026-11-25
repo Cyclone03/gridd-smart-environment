@@ -3,7 +3,7 @@ import threading
 from confluent_kafka import OFFSET_END
 from django.test import SimpleTestCase
 
-from shared.contracts.event_types import EventTypes
+from shared.kernel.events.event_types import EventTypes
 from shared.messaging import (
     CommandFailed,
     CommandTimeout,

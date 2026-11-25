@@ -4,8 +4,9 @@ import time
 from confluent_kafka import KafkaException, TopicPartition
 from django.db import close_old_connections
 
+from shared.kernel.events import MessageRejected
+
 from .inbound_message import InboundMessage
-from .message_rejected import MessageRejected
 from .messaging_unavailable import MessagingUnavailable
 from .partition_assignment_monitor import PartitionAssignmentMonitor
 

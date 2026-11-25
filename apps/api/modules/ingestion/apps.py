@@ -13,13 +13,13 @@ class IngestionConfig(ModuleConfig):
         from shared.contracts.topics import Topics
         from shared.messaging import Subscription
 
-        from .consumers.sensor_reading_consumer import SensorReadingConsumer
+        from .composition import sensor_reading_consumer
 
         return [
             Subscription(
                 name="ingestion",
                 topics=tuple(Topics.sensors()),
-                handler_factory=SensorReadingConsumer.build,
+                handler_factory=sensor_reading_consumer,
                 connection="sensors",
                 start_at_live_edge=True,
             )

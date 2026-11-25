@@ -2,7 +2,7 @@ import itertools
 import json
 
 from modules.database.models import Observation
-from modules.ingestion.consumers.sensor_reading_consumer import SensorReadingConsumer
+from modules.ingestion.composition import sensor_reading_consumer
 from shared.contracts.topics import Topics
 from shared.messaging import InboundMessage
 
@@ -18,7 +18,7 @@ class SensorPipeline:
     _offsets = itertools.count(1)
 
     def __init__(self):
-        self._consumer = SensorReadingConsumer.build()
+        self._consumer = sensor_reading_consumer()
 
     def ingest(self, *, node_id, observation_type, value, unit, observed_at=None, metadata=None, broker_timestamp_ms=None):
         payload = {"node_id": node_id, "type": observation_type, "value": value, "unit": unit, "metadata": metadata or {}}

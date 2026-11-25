@@ -12,7 +12,7 @@ Tous les noms de topics sont configurables (voir `apps/api/.env.example`).
 | `gridd.backend.alarms.commands` | `alarms` (API) | `database` | `rule:<id>` |
 | `gridd.backend.database.events` | `database` | `alarms`, `realtime` | zone ou `rule:<id>` |
 | `gridd.backend.database.replies` | `database` | émetteur de la commande | `correlation_id` |
-| `gridd.backend.ai_prediction.events` | `ai_prediction_service` | `database` | zone ou `weather` |
+| `gridd.backend.ai_prediction.events` | `ia` (source `ai_prediction_service`) | `database` | zone ou `weather` |
 
 Par défaut, `database` lit aussi `gridd.backend.ai_prediction.events`.
 `DATABASE_SUBSCRIBED_TOPICS`, lorsqu'il est défini, remplace la liste par défaut
@@ -99,9 +99,11 @@ Réponses sur `database.replies` :
 - `command.succeeded` : `{"data": {…}}` ;
 - `command.failed` : `{"error": {"code": "not_found | invalid | error", "message": "…", "errors": {"champ": ["…"]}}}`.
 
-### `ai_prediction_service` → `database`
+### `ia` → `database`
 
-Topic : `gridd.backend.ai_prediction.events`.
+Topic : `gridd.backend.ai_prediction.events`. Publié par le module IA
+(`apps/api/modules/ia`) ; le champ `source` reste `ai_prediction_service`
+(valeur contrôlée par le module Database).
 
 **`climate_prediction.generated`** utilise la même enveloppe que les autres
 événements internes. `occurred_at` est l'instant de génération; `generated_at`

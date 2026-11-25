@@ -8,7 +8,7 @@ from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 
 from modules.database.models import Alert, Observation, Sensor, Zone
-from modules.realtime.routing import websocket_urlpatterns
+from modules.realtime.adapters.websocket.routing import websocket_urlpatterns
 
 IN_MEMORY_LAYER = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 

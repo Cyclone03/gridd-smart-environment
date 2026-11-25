@@ -9,9 +9,9 @@ schéma et leurs données, mais ne sont plus alimentés par un traitement actif.
 from .alarm_rule import AlarmRule
 from .alarm_rule_state import AlarmRuleState
 from .alert import Alert
+from .climate_prediction import ClimatePrediction
 from .comfort_assessment import ComfortAssessment
 from .comfort_profile import ComfortProfile
-from .climate_prediction import ClimatePrediction
 from .energy_estimate import EnergyEstimate
 from .energy_profile import EnergyProfile
 from .observation import Observation

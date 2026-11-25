@@ -13,6 +13,6 @@ class RealtimeConfig(ModuleConfig):
         from shared.contracts.topics import Topics
         from shared.messaging import Subscription
 
-        from .consumers.realtime_consumer import RealtimeConsumer
+        from .composition import realtime_consumer
 
-        return [Subscription(name="realtime", topics=(Topics.database_events(),), handler_factory=RealtimeConsumer.build)]
+        return [Subscription(name="realtime", topics=(Topics.database_events(),), handler_factory=realtime_consumer)]

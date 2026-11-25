@@ -2,7 +2,7 @@ import logging
 
 from django.db import transaction
 
-from modules.database.producers.database_events_producer import DatabaseEventsProducer
+from modules.database.adapters.messaging.database_events_producer import DatabaseEventsProducer
 from shared.messaging import Messaging
 
 logger = logging.getLogger(__name__)

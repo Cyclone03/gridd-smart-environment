@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     "modules.realtime.apps.RealtimeConfig",
     "modules.health.apps.HealthConfig",
     "modules.simulator.apps.SimulatorConfig",
+    "modules.ia.apps.IaConfig",
 ]
 
 
@@ -344,6 +345,43 @@ HEALTH_MAX_DATA_AGE_SECONDS = env_int("HEALTH_MAX_DATA_AGE_SECONDS", 600)
 KAFKA_AUTO_CREATE_TOPICS = env_bool("KAFKA_AUTO_CREATE_TOPICS", True)
 KAFKA_TOPIC_PARTITIONS = env_int("KAFKA_TOPIC_PARTITIONS", 3)
 KAFKA_TOPIC_REPLICATION_FACTOR = env_int("KAFKA_TOPIC_REPLICATION_FACTOR", 1)
+
+
+# ---------------------------------------------------------------------------
+# Module IA (python manage.py run_ai_predictions, image Docker « ia »)
+# ---------------------------------------------------------------------------
+
+
+def env_optional_float(name):
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"{name} doit être un nombre.") from exc
+
+
+AI_STATE_DIR = Path(os.getenv("AI_STATE_DIR") or Path.home() / ".gridd-ai-prediction")
+AI_ARTIFACT_MANIFEST_PATH = os.getenv("AI_ARTIFACT_MANIFEST_PATH") or str(
+    BASE_DIR / "modules" / "ia" / "artifacts" / "manifest.json"
+)
+# Empreintes SHA-256 des scalers (pickles) approuvées par l'équipe : rien n'est
+# chargé sans approbation explicite (voir modules/ia/README.md).
+AI_APPROVED_SCALER_SHA256 = os.getenv("AI_APPROVED_SCALER_SHA256", "")
+# Confirmation que le chargement des artefacts se fait dans un conteneur isolé.
+AI_ISOLATED_ENVIRONMENT = env_bool("AI_ISOLATED_ENVIRONMENT", False)
+AI_PREDICTION_LEDGER_PATH = os.getenv("AI_PREDICTION_LEDGER_PATH") or str(AI_STATE_DIR / "predictions.sqlite3")
+AI_PREDICTION_HEARTBEAT_PATH = os.getenv("AI_PREDICTION_HEARTBEAT_PATH") or str(AI_STATE_DIR / "heartbeat")
+AI_PREDICTION_INTERVAL_SECONDS = env_int("AI_PREDICTION_INTERVAL_SECONDS", 3600)
+AI_PREDICTION_HEARTBEAT_INTERVAL_SECONDS = env_float("AI_PREDICTION_HEARTBEAT_INTERVAL_SECONDS", 30)
+AI_PREDICTION_HEARTBEAT_MAX_AGE_SECONDS = env_float("AI_PREDICTION_HEARTBEAT_MAX_AGE_SECONDS", 180)
+# Source des mesures intérieures : « database » (lecture directe) ou « api » (REST).
+AI_OBSERVATION_SOURCE = os.getenv("AI_OBSERVATION_SOURCE", "database").strip().lower()
+GRIDD_API_BASE_URL = os.getenv("GRIDD_API_BASE_URL", "http://localhost:8000").rstrip("/")
+AI_HTTP_TIMEOUT_SECONDS = env_float("AI_HTTP_TIMEOUT_SECONDS", env_float("HTTP_TIMEOUT_SECONDS", 10))
+OPEN_METEO_LATITUDE = env_optional_float("OPEN_METEO_LATITUDE")
+OPEN_METEO_LONGITUDE = env_optional_float("OPEN_METEO_LONGITUDE")
 
 
 # ---------------------------------------------------------------------------

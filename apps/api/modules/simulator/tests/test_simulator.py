@@ -1,7 +1,7 @@
 from django.test import TestCase
 
 from modules.database.models import Observation, Sensor, ThresholdProfile, Zone
-from modules.simulator.services.simulator_service import SimulatorService
+from modules.simulator.composition import simulator_service
 
 
 class SimulatorTests(TestCase):
@@ -11,7 +11,7 @@ class SimulatorTests(TestCase):
         Sensor.objects.create(node_id="meeting-room-temperature", sensor_type="temperature", zone=zone, unit="°C")
         Sensor.objects.create(node_id="meeting-room-occupancy", sensor_type="occupancy", zone=zone, unit="count")
 
-        simulator = SimulatorService.build()
+        simulator = simulator_service()
         self.assertEqual(simulator.start(), 2)
         simulator.tick()
 

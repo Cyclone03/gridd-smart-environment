@@ -1,4 +1,5 @@
-from .event import Event
+from shared.kernel.events import Event
+
 from .message_handler import MessageHandler
 
 

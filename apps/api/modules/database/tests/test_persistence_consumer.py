@@ -2,15 +2,15 @@ import uuid
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.db import OperationalError
 from django.apps import apps
+from django.db import OperationalError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from modules.database.consumers.persistence_consumer import PersistenceConsumer
+from modules.database.composition import persistence_consumer
 from modules.database.models import AlarmRule, Alert, ClimatePrediction, Observation, WeatherSnapshot, Zone
-from shared.contracts.event_types import EventTypes
 from shared.contracts.topics import Topics
+from shared.kernel.events.event_types import EventTypes
 from shared.messaging import Event, InboundMessage, MessageRejected
 
 
@@ -30,7 +30,7 @@ class PersistenceConsumerTests(TestCase):
 
     def setUp(self):
         self.publisher = RecordingPublisher()
-        self.consumer = PersistenceConsumer.build(publisher=self.publisher)
+        self.consumer = persistence_consumer(publisher=self.publisher)
 
     def deliver(self, event, topic=None):
         self.consumer.handle(InboundMessage(topic=topic or Topics.ingestion_observations(), value=event.encode()))
@@ -210,7 +210,7 @@ class PersistenceConsumerTests(TestCase):
         Zone.objects.create(name="Espace ouvert", code="open-workspace")
         event = self.prediction_event()
         with patch(
-            "modules.database.writers.climate_prediction_writer.ClimatePrediction.objects.get_or_create",
+            "modules.database.adapters.persistence.climate_prediction_writer.ClimatePrediction.objects.get_or_create",
             side_effect=OperationalError("isolated database failure"),
         ):
             with self.assertRaises(OperationalError):
@@ -334,7 +334,7 @@ class BatchPersistenceTests(PersistenceConsumerTests):
         self.assertEqual(len(self.published(EventTypes.OBSERVATION_PERSISTED)), 20)
 
     def test_known_zones_and_sensors_are_not_read_again(self):
-        consumer = PersistenceConsumer.build(publisher=self.publisher)
+        consumer = persistence_consumer(publisher=self.publisher)
         consumer._observations._cache_references = True
         warmup = self.observation_event(str(uuid.uuid4()))
         consumer.handle(InboundMessage(topic=Topics.ingestion_observations(), value=warmup.encode()))

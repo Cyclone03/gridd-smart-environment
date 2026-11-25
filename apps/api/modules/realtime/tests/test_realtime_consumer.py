@@ -2,10 +2,11 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
-from modules.realtime.consumers.realtime_consumer import RealtimeConsumer
-from modules.realtime.services.realtime_broadcaster import RealtimeBroadcaster
-from modules.realtime.services.realtime_groups import RealtimeGroups
-from shared.contracts.event_types import EventTypes
+from modules.realtime.adapters.messaging.realtime_consumer import RealtimeConsumer
+from modules.realtime.adapters.websocket.realtime_broadcaster import RealtimeBroadcaster
+from modules.realtime.core.domain.realtime_groups import RealtimeGroups
+from modules.realtime.core.services.realtime_relay_service import RealtimeRelayService
+from shared.kernel.events.event_types import EventTypes
 from shared.messaging import Event, InboundMessage, MessageRejected
 
 
@@ -96,7 +97,7 @@ class RealtimeConsumerTests(SimpleTestCase):
 
     def test_database_failure_does_not_break_the_consumer(self):
         broadcaster = RecordingBroadcaster()
-        with self.assertLogs("modules.realtime.consumers.realtime_consumer", level="ERROR"):
+        with self.assertLogs("modules.realtime.core.services.realtime_relay_service", level="ERROR"):
             self.deliver(
                 RealtimeConsumer(broadcaster, StubSnapshots(fail=True)),
                 Event(type=EventTypes.ALERTS_CHANGED, payload={"zone_code": "salle"}),
@@ -265,13 +266,14 @@ class ObservationBatchingTests(SimpleTestCase):
         return {"id": f"{sensor}-{observed_at}", "zone_code": zone, "sensor": sensor, "type": metric, "observed_at": observed_at}
 
     def test_backlog_is_reduced_to_the_latest_value_per_sensor(self):
-        from datetime import datetime, timezone as tz
+        from datetime import datetime
+        from datetime import timezone as tz
 
         now = datetime(2026, 11, 14, 20, 0, tzinfo=tz.utc)
         old = [self.payload(1, f"2026-11-14T10:00:{second:02d}+00:00") for second in range(50)]
         old += [self.payload(2, "2026-11-14T10:00:00+00:00")]
         fresh = [self.payload(1, "2026-11-14T19:59:30+00:00"), self.payload(1, "2026-11-14T19:59:35+00:00")]
-        kept = RealtimeConsumer.coalesce(old + fresh, now=now)
+        kept = RealtimeRelayService.coalesce(old + fresh, now=now)
         self.assertEqual(len(kept), 4)  # 1 ancienne par capteur + toutes les récentes
         self.assertIn("1-2026-11-14T10:00:49+00:00", [item["id"] for item in kept])
 
@@ -315,11 +317,11 @@ class RealtimeBroadcasterTests(SimpleTestCase):
                 raise RuntimeError("isolated channel layer failure")
 
         with patch(
-            "modules.realtime.services.realtime_broadcaster.get_channel_layer",
+            "modules.realtime.adapters.websocket.realtime_broadcaster.get_channel_layer",
             return_value=FailingChannelLayer(),
         ):
             with self.assertLogs(
-                "modules.realtime.services.realtime_broadcaster",
+                "modules.realtime.adapters.websocket.realtime_broadcaster",
                 level="ERROR",
             ):
                 RealtimeBroadcaster().climate_prediction_created(

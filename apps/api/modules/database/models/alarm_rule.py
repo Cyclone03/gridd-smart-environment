@@ -1,8 +1,8 @@
 from django.conf import settings
 from django.db import models
 
-from shared.metrics.metric_catalog import MetricCatalog
-from shared.metrics.operator import Operator as Operators
+from shared.kernel.metrics.metric_catalog import MetricCatalog
+from shared.kernel.metrics.operator import Operator as Operators
 
 from .alert import Alert
 from .sensor import Sensor

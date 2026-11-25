@@ -16,7 +16,7 @@ class DatabaseConfig(ModuleConfig):
         from shared.contracts.topics import Topics
         from shared.messaging import Subscription
 
-        from .consumers.persistence_consumer import PersistenceConsumer
+        from .composition import persistence_consumer
 
         # Les commandes ont leur propre consommateur : une réponse attendue par
         # l'API ne doit jamais patienter derrière un arriéré de mesures.
@@ -24,7 +24,7 @@ class DatabaseConfig(ModuleConfig):
         commands = tuple(topic for topic in topics if topic in Topics.commands())
         events = tuple(topic for topic in topics if topic not in commands)
         return [
-            Subscription(name=name, topics=group, handler_factory=PersistenceConsumer.build)
+            Subscription(name=name, topics=group, handler_factory=persistence_consumer)
             for name, group in (("database", events), ("database-commands", commands))
             if group
         ]
