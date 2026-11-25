@@ -420,6 +420,9 @@ LOGGING = {
         # domaine) : Django répond 400, la ligne d'accès de Daphne suffit ; sans
         # ceci, chaque requête produit une trace de pile complète en ERROR.
         "django.security.DisallowedHost": {"handlers": [], "level": "CRITICAL", "propagate": False},
+        # Module IA : avertissement « tf.function retracing » attendu (un modèle
+        # différent par zone), sans conséquence.
+        "tensorflow": {"handlers": ["console"], "level": "ERROR", "propagate": False},
         # « N of M channels over capacity » est journalisé en INFO à chaque envoi.
         "channels_redis": {"handlers": ["console"], "level": "WARNING", "propagate": False},
     },

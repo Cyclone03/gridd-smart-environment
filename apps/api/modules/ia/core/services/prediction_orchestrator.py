@@ -14,7 +14,7 @@ from modules.ia.core.domain.weather_snapshot_event import WeatherSnapshotEvent
 from modules.ia.core.domain.zone_prediction import ZonePrediction
 from modules.ia.core.domain.zone_prediction_failure import ZonePredictionFailure
 from modules.ia.core.domain.zones import ZONE_MODEL_MAPPING
-from modules.ia.core.errors import PredictionInputError
+from modules.ia.core.errors import CollectionError, PredictionInputError
 from modules.ia.core.inference.contract import INPUT_FEATURES
 from modules.ia.core.ports.prediction_ledger import PredictionLedger
 from modules.ia.core.ports.prediction_publisher import PredictionPublisher
@@ -193,8 +193,8 @@ class PredictionOrchestrator:
                     successes.append(prediction)
             except Exception as exc:
                 # This boundary deliberately isolates one zone; every failure is logged and returned.
-                if isinstance(exc, PredictionInputError):
-                    # Expected data condition (stale, incoherent…): no stack trace.
+                if isinstance(exc, (PredictionInputError, CollectionError)):
+                    # Expected data condition (stale, missing, incoherent…): no stack trace.
                     logger.error("Climate prediction skipped for zone %s: %s", zone_code, exc)
                 else:
                     logger.exception("Climate prediction failed for zone %s.", zone_code)
