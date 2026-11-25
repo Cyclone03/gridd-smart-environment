@@ -1,0 +1,16 @@
+from typing import Protocol
+
+
+class AlarmEventsPublisher(Protocol):
+    """Décisions du moteur d'alarmes, enregistrées par le propriétaire des
+    données (voir ``docs/events.md``, topic ``alarms.events``)."""
+
+    def alert_raised(self, *, zone_code, code, rule_id, severity, message, trigger_value, observation_id, refresh_fields): ...
+
+    def alert_resolved(self, *, zone_code, code, resolution, observation_id=None): ...
+
+    def state_saved(self, *, rule_id, zone_code, state): ...
+
+    def rule_reset(self, *, rule_id, alert_code, resolution): ...
+
+    def severity_propagated(self, *, rule_id, alert_code, severity): ...

@@ -90,7 +90,7 @@ PeriodSelector ─ onApply ─► useObservationPeriod (URL ?period / ?start&end
 Les préréglages sont dans `../apps/web/src/constants/periods.ts` (`PERIOD_PRESETS`).
 La limite de durée côté interface (`MAX_RANGE_DAYS`) doit rester alignée sur
 `HISTORY_MAX_RANGE_DAYS` de l'API. Les granularités possibles sont dans
-`apps/api/modules/history/domain/period_parser.py` (`BUCKET_CHOICES_MINUTES`).
+`apps/api/shared/kernel/periods/period_parser.py` (`BUCKET_CHOICES_MINUTES`).
 
 Les capteurs envoient environ une mesure par minute : en deçà de 15 minutes, la
 courbe compte trop peu de points pour être utile, d'où l'absence de période

@@ -10,7 +10,7 @@ django_asgi_application = get_asgi_application()
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 from channels.security.websocket import OriginValidator  # noqa: E402
 
-from modules.realtime.routing import websocket_urlpatterns  # noqa: E402
+from modules.realtime.adapters.websocket.routing import websocket_urlpatterns  # noqa: E402
 
 # Le frontend est servi depuis un autre domaine que l'API : les WebSocket
 # acceptent donc les hôtes de l'API et les origines CORS configurées

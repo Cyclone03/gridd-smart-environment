@@ -7,8 +7,8 @@
 /** Types de mesure connus du backend. */
 export type MetricType = "temperature" | "humidity" | "co2" | "sound_level" | "occupancy";
 
-/** Types de mesure affichés par l'interface (le CO₂ n'est pas déployé). */
-export type DisplayMetric = Exclude<MetricType, "co2">;
+/** Types affichés dans les espaces (CO₂ et occupation ne sont pas déployés ici). */
+export type DisplayMetric = Exclude<MetricType, "co2" | "occupancy">;
 
 export type QualityStatus = "normal" | "suspicious" | "invalid";
 

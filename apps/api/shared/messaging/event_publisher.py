@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from .event import Event
+from shared.kernel.events import Event
 
 
 class EventPublisher(ABC):

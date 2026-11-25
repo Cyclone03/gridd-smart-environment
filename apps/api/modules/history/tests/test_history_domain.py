@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 from django.test import SimpleTestCase
 from django.utils import timezone
 
-from modules.history.domain.history_statistics import HistoryStatistics
-from shared.periods import PeriodParamError, PeriodParser, TimeBucket
+from modules.history.core.domain.history_statistics import HistoryStatistics
+from shared.kernel.periods import PeriodParamError, PeriodParser, TimeBucket
 
 
 class HistoryDomainTests(SimpleTestCase):

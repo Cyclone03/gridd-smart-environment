@@ -4,8 +4,8 @@ from django.test import TestCase
 from django.utils import timezone
 
 from modules.database.models import AlarmRule, AlarmRuleState, Alert, Sensor, ThresholdProfile, Zone
-from shared.contracts.event_types import EventTypes
 from shared.contracts.topics import Topics
+from shared.kernel.events.event_types import EventTypes
 from shared.messaging import Event, Messaging
 from tests.support.sensor_pipeline import SensorPipeline
 

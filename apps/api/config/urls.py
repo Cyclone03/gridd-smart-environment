@@ -11,8 +11,8 @@ from django.urls import include, path
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/", include("modules.health.urls")),
-    path("api/", include("modules.history.urls")),
-    path("api/", include("modules.observations.urls")),
-    path("api/", include("modules.alarms.urls")),
+    path("api/", include("modules.health.adapters.http.urls")),
+    path("api/", include("modules.history.adapters.http.urls")),
+    path("api/", include("modules.observations.adapters.http.urls")),
+    path("api/", include("modules.alarms.adapters.http.urls")),
 ]

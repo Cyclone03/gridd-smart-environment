@@ -2,7 +2,7 @@ import time
 
 from django.core.management.base import BaseCommand
 
-from modules.simulator.services.simulator_service import SimulatorService
+from modules.simulator.composition import simulator_service
 
 
 class Command(BaseCommand):
@@ -13,7 +13,7 @@ class Command(BaseCommand):
         parser.add_argument("--iterations", type=int, default=0, help="Nombre de séries (0 = sans fin)")
 
     def handle(self, *args, **options):
-        simulator = SimulatorService.build()
+        simulator = simulator_service()
         count = simulator.start()
         self.stdout.write(f"Simulateur GRIDD démarré ({count} capteurs). Ctrl+C pour arrêter.")
         iteration = 0

@@ -45,6 +45,10 @@ class Topics:
         return settings.KAFKA_TOPICS["database_replies"]
 
     @staticmethod
+    def ai_prediction_events() -> str:
+        return settings.KAFKA_TOPICS["ai_prediction_events"]
+
+    @staticmethod
     def database_subscriptions() -> tuple[str, ...]:
         """Topics que le module Database persiste (DATABASE_SUBSCRIBED_TOPICS)."""
         return tuple(settings.DATABASE_SUBSCRIBED_TOPICS)

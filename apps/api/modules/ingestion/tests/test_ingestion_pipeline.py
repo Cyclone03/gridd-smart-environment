@@ -43,6 +43,44 @@ class IngestionPipelineTests(TestCase):
             self.ingest(40, unit="%")
         self.assertFalse(Observation.objects.exists())
 
+    def test_a_node_moved_to_another_zone_feeds_that_zone_sensor(self):
+        """Un capteur = une zone + une mesure : un nœud GRIDD déplacé ou
+        réétiqueté alimente le capteur de sa nouvelle zone, sans rejet."""
+        first = self.ingest(21.5)
+        other = Zone.objects.create(name="Cubicule 02", code="individual-work-cubicle-02")
+        ThresholdProfile.objects.create(zone=other)
+
+        moved = self.pipeline.ingest(
+            node_id=self.sensor.node_id,
+            observation_type="temperature",
+            value=22.5,
+            unit="C",
+            observed_at=timezone.now(),
+            metadata={"zone": {"id": other.code, "label": other.name}},
+        )
+
+        self.assertEqual((first.zone, first.sensor.node_id), (self.zone, "salle-cours-temperature"))
+        self.assertEqual((moved.zone, moved.sensor.node_id), (other, "individual-work-cubicle-02-temperature"))
+        self.assertEqual(moved.sensor.metadata["source_node_id"], self.sensor.node_id)
+
+    def test_equivalent_units_are_accepted_for_the_zone_sensor(self):
+        self.ingest(21.5)  # crée salle-cours-temperature en « °C »
+        self.assertEqual(self.ingest(21.6, unit="C").unit, "C")
+
+    def test_a_node_without_zone_never_becomes_a_zone(self):
+        with self.assertRaisesMessage(MessageRejected, "zone absente pour le nœud node01"):
+            self.pipeline.ingest(node_id="node01", observation_type="sound_level", value=51.8, unit="dBA")
+        self.assertFalse(Zone.objects.filter(code="node01").exists())
+
+    def test_configured_node_mapping_places_the_measure(self):
+        from django.test import override_settings
+
+        with override_settings(GRIDD_NODE_ZONES={"node01": self.zone.code}):
+            from tests.support.sensor_pipeline import SensorPipeline
+
+            observation = SensorPipeline().ingest(node_id="node01", observation_type="sound_level", value=51.8, unit="dBA")
+        self.assertEqual((observation.zone, observation.sensor.node_id), (self.zone, "salle-cours-sound_level"))
+
     def test_new_zone_and_sensor_are_created_by_the_database_module(self):
         observation = self.pipeline.ingest(
             node_id="meeting-sound",
@@ -55,7 +93,8 @@ class IngestionPipelineTests(TestCase):
         zone = Zone.objects.get(code="meeting-room")
         self.assertEqual((zone.name, zone.zone_type), ("Salle de réunion", Zone.ZoneType.MEETING_ROOM))
         self.assertFalse(zone.threshold_profile.enabled)
-        self.assertEqual(observation.sensor.node_id, "meeting-sound")
+        self.assertEqual(observation.sensor.node_id, "meeting-room-sound_level")
+        self.assertEqual(observation.sensor.metadata["source_node_id"], "meeting-sound")
         self.assertNotIn("_kafka", observation.sensor.metadata)
         self.assertIn("_kafka", observation.metadata)
 
@@ -68,7 +107,7 @@ class IngestionPipelineTests(TestCase):
                 self.events.append((group, event))
 
         channel_layer = ChannelLayer()
-        with patch("modules.realtime.services.realtime_broadcaster.get_channel_layer", return_value=channel_layer):
+        with patch("modules.realtime.adapters.websocket.realtime_broadcaster.get_channel_layer", return_value=channel_layer):
             observation = self.ingest(22.5)
 
         created = [(group, event) for group, event in channel_layer.events if event["type"] == "observation.created"]

@@ -1,8 +1,9 @@
 import logging
 
+from shared.kernel.events import MessageRejected
+
 from .event_publisher import EventPublisher
 from .inbound_message import InboundMessage
-from .message_rejected import MessageRejected
 
 logger = logging.getLogger(__name__)
 

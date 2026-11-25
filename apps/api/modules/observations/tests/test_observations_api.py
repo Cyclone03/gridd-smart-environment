@@ -1,9 +1,10 @@
 from datetime import timedelta
+from uuid import uuid4
 
 from django.test import Client, TestCase
 from django.utils import timezone
 
-from modules.database.models import Observation, Sensor, Zone
+from modules.database.models import ClimatePrediction, Observation, Sensor, WeatherSnapshot, Zone
 
 
 class LatestObservationsApiTests(TestCase):
@@ -74,6 +75,120 @@ class LatestObservationsApiTests(TestCase):
         payload = self.client.get("/api/sensors/?zone=meeting-room").json()
         self.assertEqual([item["node_id"] for item in payload], ["room-humidity"])
         self.assertEqual(payload[0]["zone_name"], "Salle de réunion")
+
+    def test_latest_climate_predictions_returns_latest_per_active_zone_in_event_contract(self):
+        now = timezone.now()
+        inactive_zone = Zone.objects.create(
+            name="Zone inactive",
+            code="inactive-zone",
+            zone_type="office",
+            active=False,
+        )
+        old_prediction = ClimatePrediction.objects.create(
+            event_id=uuid4(),
+            zone=self.office,
+            generated_at=now - timedelta(hours=2),
+            target_at=now - timedelta(hours=1),
+            predicted_temperature_c=21.5,
+            predicted_humidity_percent=40.0,
+            model_version="zone-model-v1",
+            prediction_mode=ClimatePrediction.PredictionMode.EXPERIMENTAL,
+        )
+        latest_prediction = ClimatePrediction.objects.create(
+            event_id=uuid4(),
+            zone=self.office,
+            generated_at=now - timedelta(minutes=5),
+            target_at=now + timedelta(minutes=55),
+            predicted_temperature_c=22.5,
+            predicted_humidity_percent=42.0,
+            model_version="zone-model-v2",
+            prediction_mode=ClimatePrediction.PredictionMode.OPERATIONAL,
+        )
+        ClimatePrediction.objects.create(
+            event_id=uuid4(),
+            zone=self.room,
+            generated_at=now - timedelta(minutes=10),
+            target_at=now + timedelta(minutes=50),
+            predicted_temperature_c=23.0,
+            predicted_humidity_percent=43.0,
+            model_version="meeting-model-v1",
+            prediction_mode=ClimatePrediction.PredictionMode.EXPERIMENTAL,
+        )
+        ClimatePrediction.objects.create(
+            event_id=uuid4(),
+            zone=inactive_zone,
+            generated_at=now,
+            target_at=now + timedelta(hours=1),
+            predicted_temperature_c=20.0,
+            predicted_humidity_percent=45.0,
+            model_version="inactive-model",
+            prediction_mode=ClimatePrediction.PredictionMode.EXPERIMENTAL,
+        )
+
+        response = self.client.get("/api/climate-predictions/latest/")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual({item["zone_code"] for item in payload}, {"professors-office", "meeting-room"})
+        self.assertEqual(len(payload), 2)
+        office_prediction = next(item for item in payload if item["zone_code"] == self.office.code)
+        self.assertEqual(office_prediction["prediction_id"], latest_prediction.pk)
+        self.assertNotEqual(office_prediction["prediction_id"], old_prediction.pk)
+        self.assertEqual(
+            set(office_prediction),
+            {
+                "prediction_id",
+                "prediction_event_id",
+                "zone_code",
+                "generated_at",
+                "target_at",
+                "predicted_temperature_c",
+                "predicted_humidity_percent",
+                "model_version",
+                "prediction_mode",
+            },
+        )
+        self.assertEqual(office_prediction["prediction_event_id"], str(latest_prediction.event_id))
+        self.assertEqual(office_prediction["prediction_mode"], ClimatePrediction.PredictionMode.OPERATIONAL)
+
+    def test_latest_weather_snapshot_returns_the_newest_snapshot_or_null(self):
+        now = timezone.now()
+        WeatherSnapshot.objects.create(
+            event_id=uuid4(),
+            generated_at=now - timedelta(minutes=5),
+            provider="open-meteo",
+            current_at=now - timedelta(minutes=6),
+            current_temperature_c=18.0,
+            current_relative_humidity_percent=50.0,
+            forecast_h1_at=now + timedelta(minutes=54),
+            forecast_h1_temperature_c=19.0,
+            forecast_h1_relative_humidity_percent=52.0,
+        )
+        latest = WeatherSnapshot.objects.create(
+            event_id=uuid4(),
+            generated_at=now,
+            provider="open-meteo",
+            current_at=now,
+            current_temperature_c=20.0,
+            current_relative_humidity_percent=60.0,
+            forecast_h1_at=now + timedelta(hours=1),
+            forecast_h1_temperature_c=21.0,
+            forecast_h1_relative_humidity_percent=62.0,
+        )
+
+        response = self.client.get("/api/weather/latest/")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["weather_snapshot_id"], latest.pk)
+        self.assertEqual(payload["weather_snapshot_event_id"], str(latest.event_id))
+        self.assertEqual(payload["provider"], "open-meteo")
+
+    def test_latest_weather_snapshot_returns_null_when_no_snapshot_exists(self):
+        response = self.client.get("/api/weather/latest/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json())
 
 
 class ZoneApiTests(TestCase):

@@ -57,8 +57,10 @@ class Command(BaseCommand):
             return
         node_id = payload.get("node_id") or payload.get("nodeId") or "unknown"
         nodes[topic].add(node_id)
-        zone = (payload.get("metadata") or {}).get("zone") or {}
+        metadata = payload.get("metadata")
+        extra = {key: payload[key] for key in ("zone", "zone_id", "zoneId", "location") if key in payload}
         self.stdout.write(
             f"{topic} | node={node_id} | type={payload.get('type')} | value={payload.get('value')} "
-            f"| unit={payload.get('unit')} | zone={zone.get('id', 'unknown')} ({zone.get('label', 'unknown')})"
+            f"| unit={payload.get('unit')} | metadata={json.dumps(metadata, ensure_ascii=False)[:300]}"
+            + (f" | {json.dumps(extra, ensure_ascii=False)}" if extra else "")
         )

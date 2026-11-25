@@ -1,0 +1,278 @@
+﻿
+==================== CELLULE 1 ====================
+import pandas as pd
+import json
+
+def extract_core_observation(sql_file):
+
+    columns = [
+        "id",
+        "type",
+        "value",
+        "unit",
+        "observed_at",
+        "received_at",
+        "metadata",
+        "quality_status",
+        "quality_reason",
+        "sensor_id",
+        "zone_id"
+    ]
+
+    rows = []
+    errors = []
+    reading = False
+
+    with open(sql_file, "r", encoding="utf-8") as f:
+
+        for line_number, line in enumerate(f, start=1):
+
+            if line.startswith("COPY public.core_observation"):
+                reading = True
+                continue
+
+            if reading:
+
+                if line.strip() == r"\.":
+                    break
+
+                row = line.rstrip("\r\n").split("\t")
+
+                if len(row) != len(columns):
+                    errors.append({
+                        "line": line_number,
+                        "expected": len(columns),
+                        "found": len(row)
+                    })
+                    continue
+
+                row = [
+                    None if value == r"\N" else value
+                    for value in row
+                ]
+
+                rows.append(row)
+
+    df = pd.DataFrame(rows, columns=columns)
+
+    for col in ["id", "sensor_id", "zone_id"]:
+        df[col] = pd.to_numeric(
+            df[col], errors="coerce"
+        ).astype("Int64")
+
+    df["value"] = pd.to_numeric(
+        df["value"], errors="coerce"
+    )
+
+    df["observed_at"] = pd.to_datetime(
+        df["observed_at"], utc=True, errors="coerce"
+    )
+
+    df["received_at"] = pd.to_datetime(
+        df["received_at"], utc=True, errors="coerce"
+    )
+
+    df["metadata"] = df["metadata"].apply(
+        lambda x: json.loads(x) if isinstance(x, str) and x else None
+    )
+
+    print("Nombre de lignes extraites :", len(df))
+    print("Nombre d'erreurs :", len(errors))
+
+    return df, errors
+
+df, errors = extract_core_observation(
+    "C:/Users/AW40930/Downloads/gridd-2026-11-04_183449-dump.sql"
+)
+
+display(df.head())
+print(df.info())
+
+==================== CELLULE 3 ====================
+import openmeteo_requests
+
+import pandas as pd
+import requests_cache
+from retry_requests import retry
+
+# Setup the Open-Meteo API client with cache and retry on error
+cache_session = requests_cache.CachedSession('.cache', expire_after = -1)
+retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
+openmeteo = openmeteo_requests.Client(session = retry_session)
+
+# Make sure all required weather variables are listed here
+# The order of variables in hourly or daily is important to assign them correctly below
+url = "https://archive-api.open-meteo.com/v1/archive"
+params = {
+	"latitude": 45.5088,
+	"longitude": -73.5878,
+	"start_date": "2026-10-01",
+	"end_date": "2026-11-05",
+	"hourly": ["temperature_2m", "relative_humidity_2m"],
+}
+responses = openmeteo.weather_api(url, params = params)
+
+# Process first location. Add a for-loop for multiple locations or weather models
+response = responses[0]
+print(f"Coordinates: {response.Latitude()}??N {response.Longitude()}??E")
+print(f"Elevation: {response.Elevation()} m asl")
+print(f"Timezone difference to GMT+0: {response.UtcOffsetSeconds()}s")
+
+# Process hourly data. The order of variables needs to be the same as requested.
+hourly = response.Hourly()
+hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+hourly_relative_humidity_2m = hourly.Variables(1).ValuesAsNumpy()
+
+hourly_data = {
+	"date": pd.date_range(
+		start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
+		end =  pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True),
+		freq = pd.Timedelta(seconds = hourly.Interval()),
+		inclusive = "left"
+	)
+}
+
+hourly_data["temperature_2m"] = hourly_temperature_2m
+hourly_data["relative_humidity_2m"] = hourly_relative_humidity_2m
+
+hourly_dataframe = pd.DataFrame(data = hourly_data)
+print("\nHourly data\n", hourly_dataframe)
+
+
+==================== CELLULE 5 ====================
+df['observed_at'] = pd.to_datetime(df['observed_at'], utc=True)
+
+df['timestamp'] = df['observed_at'].dt.floor('60min')
+
+df_new = df.pivot_table(
+    index='timestamp',
+    columns=['zone_id', 'type'],
+    values='value',
+    aggfunc='mean'
+)
+
+df_new.columns = [
+    f'{type_}_zone{zone}'
+    for zone, type_ in df_new.columns
+]
+
+df_new = df_new.reset_index()
+
+==================== CELLULE 6 ====================
+df_new['timestamp'] = pd.to_datetime(
+    df_new['timestamp'], utc=True
+).dropna()
+
+hourly_dataframe['date'] = pd.to_datetime(
+    hourly_dataframe['date'], utc=True
+).dropna()
+
+==================== CELLULE 7 ====================
+df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], utc=True)
+hourly_dataframe["date"] = pd.to_datetime(hourly_dataframe["date"], utc=True)
+
+df_combined = pd.merge_asof(
+    df_new.sort_values("timestamp"),
+    hourly_dataframe.sort_values("date"),
+    left_on="timestamp",
+    right_on="date",
+    direction="nearest",
+    tolerance=pd.Timedelta("60min")
+)
+
+==================== CELLULE 8 ====================
+df_combined['occupancy_zone7'] = df_combined['occupancy_zone7'].ffill()
+
+==================== CELLULE 9 ====================
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from tensorflow.keras.optimizers import Adam
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
+from keras.models import Model
+
+==================== CELLULE 11 ====================
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+import numpy as np
+
+X = df_combined[['temperature_zone1','humidity_zone1','temperature_2m','relative_humidity_2m']].iloc[0:int(len(df_combined)*60/100)+1]
+Y = df_combined[['temperature_zone1','humidity_zone1']].iloc[0:int(len(df_combined)*60/100)+1]
+
+Xval = df_combined[['temperature_zone1','humidity_zone1','temperature_2m','relative_humidity_2m']].iloc[int(len(df_combined)*60/100):int(len(df_combined)*80/100)+1]
+Yval = df_combined[['temperature_zone1','humidity_zone1']].iloc[int(len(df_combined)*60/100):int(len(df_combined)*80/100)+1]
+
+Xtest = df_combined[['temperature_zone1','humidity_zone1','temperature_2m','relative_humidity_2m']].iloc[int(len(df_combined)*80/100):int(len(df_combined))+1]
+Ytest = df_combined[['temperature_zone1','humidity_zone1']].iloc[int(len(df_combined)*80/100):int(len(df_combined))+1]
+
+scaler_X = MinMaxScaler()
+scaler_Y = MinMaxScaler()
+
+# Fit on the training
+X_scaled = scaler_X.fit_transform(X)
+Y_scaled = scaler_Y.fit_transform(Y)
+
+# Transformation validation and test
+Xval_scaled = scaler_X.transform(Xval)
+Yval_scaled = scaler_Y.transform(Yval)
+
+Xtest_scaled = scaler_X.transform(Xtest)
+Ytest_scaled = scaler_Y.transform(Ytest)
+
+==================== CELLULE 13 ====================
+from keras.models import load_model
+from tensorflow import keras
+
+combined_model = load_model('modelZone1.h5', compile=False)
+
+==================== CELLULE 15 ====================
+combined_model.compile(optimizer=Adam(learning_rate=0.001), loss='mae')
+
+# Resum of model
+combined_model.summary()
+
+==================== CELLULE 16 ====================
+loss = combined_model.fit(X_scaled,Y_scaled,epochs=500,batch_size=128,validation_data=(Xval_scaled,Yval_scaled))
+
+==================== CELLULE 17 ====================
+from keras.models import load_model
+from tensorflow import keras
+
+combined_model.save('modelZone1.h5')  
+
+==================== CELLULE 18 ====================
+print(r2_score(Ytest_scaled[:, 0], combined_model.predict(Xtest_scaled)[:,0]))
+print(mean_squared_error(Ytest_scaled[:, 0], combined_model.predict(Xtest_scaled)[:,0]))
+print(mean_absolute_error(Ytest_scaled[:, 0], combined_model.predict(Xtest_scaled)[:,0]))
+
+==================== CELLULE 19 ====================
+print(r2_score(Ytest_scaled[:, 1], combined_model.predict(Xtest_scaled)[:,1]))
+print(mean_squared_error(Ytest_scaled[:, 1], combined_model.predict(Xtest_scaled)[:,1]))
+print(mean_absolute_error(Ytest_scaled[:, 1], combined_model.predict(Xtest_scaled)[:,1]))
+
+==================== CELLULE 20 ====================
+ts_tra_loss = loss.history['loss']
+ts_val_loss = loss.history['val_loss']
+
+ts_in_epochs = np.arange(0, len(ts_tra_loss))
+fig = plt.figure(figsize=(25, 6))
+
+plt.plot(ts_in_epochs, ts_tra_loss, 's-', color="r", label='Training loss')
+plt.plot(ts_in_epochs, ts_val_loss, '^-', color="b", label='Validation loss')
+
+==================== CELLULE 22 ====================
+X_norm_test = scaler_Y.inverse_transform(combined_model.predict(Xtest_scaled))
+Y_norm_test = scaler_Y.inverse_transform(Ytest_scaled)
+
+==================== CELLULE 23 ====================
+t = np.arange(0,len(Xtest))
+fig=plt.figure(figsize=(25,6))
+plt.plot(t,Y_norm_test[:,0].reshape(-1, 1),color="b")
+plt.plot(t,X_norm_test[:,0],color="r")
+plt.show()
+
+==================== CELLULE 24 ====================
+t = np.arange(0,len(Xtest))
+fig=plt.figure(figsize=(25,6))
+plt.plot(t,Y_norm_test[:,1].reshape(-1, 1),color="b")
+plt.plot(t,X_norm_test[:,1],color="r")
+plt.show()
