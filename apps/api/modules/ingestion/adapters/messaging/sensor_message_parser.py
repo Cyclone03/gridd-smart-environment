@@ -42,6 +42,7 @@ class SensorMessageParser:
         source_metadata = payload.get("metadata", {})
         if not isinstance(source_metadata, dict):
             raise MessageRejected("metadata doit être un objet JSON")
+        source_metadata = self._with_top_level_zone(source_metadata, payload)
 
         observed_raw = payload.get("timestamp") or payload.get("observed_at") or payload.get("observedAt")
         observed_at = self._observed_at(observed_raw, message.timestamp_ms)
@@ -65,6 +66,17 @@ class SensorMessageParser:
             source_metadata=dict(source_metadata),
             metadata=metadata,
         )
+
+    ZONE_KEYS = ("zone", "zone_id", "zoneId", "zone_code", "zoneCode")
+
+    @classmethod
+    def _with_top_level_zone(cls, metadata, payload):
+        """Certains nœuds placent la zone à la racine du message plutôt que
+        dans ``metadata`` : elle est reprise dans les métadonnées."""
+        if any(key in metadata for key in cls.ZONE_KEYS):
+            return metadata
+        found = {key: payload[key] for key in cls.ZONE_KEYS if payload.get(key)}
+        return {**metadata, **found} if found else metadata
 
     @staticmethod
     def _decode(raw):

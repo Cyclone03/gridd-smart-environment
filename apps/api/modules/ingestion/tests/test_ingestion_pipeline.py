@@ -67,6 +67,20 @@ class IngestionPipelineTests(TestCase):
         self.ingest(21.5)  # crée salle-cours-temperature en « °C »
         self.assertEqual(self.ingest(21.6, unit="C").unit, "C")
 
+    def test_a_node_without_zone_never_becomes_a_zone(self):
+        with self.assertRaisesMessage(MessageRejected, "zone absente pour le nœud node01"):
+            self.pipeline.ingest(node_id="node01", observation_type="sound_level", value=51.8, unit="dBA")
+        self.assertFalse(Zone.objects.filter(code="node01").exists())
+
+    def test_configured_node_mapping_places_the_measure(self):
+        from django.test import override_settings
+
+        with override_settings(GRIDD_NODE_ZONES={"node01": self.zone.code}):
+            from tests.support.sensor_pipeline import SensorPipeline
+
+            observation = SensorPipeline().ingest(node_id="node01", observation_type="sound_level", value=51.8, unit="dBA")
+        self.assertEqual((observation.zone, observation.sensor.node_id), (self.zone, "salle-cours-sound_level"))
+
     def test_new_zone_and_sensor_are_created_by_the_database_module(self):
         observation = self.pipeline.ingest(
             node_id="meeting-sound",

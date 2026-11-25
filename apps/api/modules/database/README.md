@@ -11,7 +11,7 @@ modules, puis publie les faits persistés.
 | Kafka entrée | `DATABASE_SUBSCRIBED_TOPICS` (par défaut `ingestion.observations`, `alarms.events`, `alarms.commands`, `ai_prediction.events`) |
 | Kafka sortie | `database.events` : `observation.persisted`, `climate_prediction.persisted`, `weather_snapshot.persisted`, `alerts.changed`, `zones.changed`, `alarm_rule.changed` ; `database.replies` : `command.succeeded`, `command.failed` |
 | Schéma | `models/` (label d'application `core`, tables et migrations historiques conservées) |
-| Commande | `python manage.py seed_gridd` (zones GRIDD) |
+| Commandes | `python manage.py seed_gridd` (zones GRIDD) ; `python manage.py merge_zone <source> <cible> [--dry-run]` (fusion d'un espace créé par erreur, ex. `node01`) |
 | Admin | `/admin/` |
 
 Capteurs : **un par zone et par mesure** (`<zone>-<mesure>`), créés à la

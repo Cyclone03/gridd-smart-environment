@@ -1,4 +1,5 @@
 from modules.ingestion.core.domain.past_reading import PastReading
+from shared.kernel.events import MessageRejected
 from shared.kernel.sensor_identity import sensor_key
 
 
@@ -29,6 +30,12 @@ class IngestionService:
 
     def ingest(self, reading) -> dict:
         zone = self._zone_resolver.resolve(reading.source_metadata, reading.node_id)
+        if zone is None:
+            raise MessageRejected(
+                f"zone absente pour le nœud {reading.node_id}: aucune zone dans metadata "
+                f"(clés : {', '.join(sorted(reading.source_metadata)) or 'aucune'}) "
+                "et nœud absent de GRIDD_NODE_ZONES"
+            )
         # Un capteur par zone et par mesure : le nœud physique peut changer.
         sensor = sensor_key(zone.code, reading.metric)
         value = self._validator.validate(reading, zone.code, self._sensors.find(sensor, reading.metric))

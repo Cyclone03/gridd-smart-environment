@@ -300,6 +300,15 @@ KAFKA_SENSOR_TOPICS = {
     os.getenv("KAFKA_TOPIC_OCCUPANCY", "gridd.obs.occupancy.count"): "occupancy",
 }
 
+# Nœuds GRIDD qui n'annoncent pas leur zone dans leurs messages : correspondance
+# explicite « nœud=zone », séparée par des virgules (ex. node01=open-workspace).
+# Sans zone connue, la mesure est rejetée (jamais d'« espace » nommé d'après un nœud).
+GRIDD_NODE_ZONES = {
+    node.strip(): zone.strip()
+    for node, _, zone in (item.partition("=") for item in env_list("GRIDD_NODE_ZONES"))
+    if node.strip() and zone.strip()
+}
+
 # Topics de sortie des modules (voir docs/events.md).
 KAFKA_TOPICS = {
     "ingestion_observations": os.getenv("KAFKA_TOPIC_INGESTION_OBSERVATIONS", "gridd.backend.ingestion.observations"),

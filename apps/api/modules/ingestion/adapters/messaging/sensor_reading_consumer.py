@@ -23,9 +23,10 @@ class SensorReadingConsumer(MessageHandler):
         try:
             payload = self._service.ingest(reading)
         except MessageRejected as exc:
-            zone = reading.source_metadata.get("zone") or {}
+            zone = reading.source_metadata.get("zone")
+            zone_id = zone.get("id", "unknown") if isinstance(zone, dict) else zone or "unknown"
             raise MessageRejected(
-                f"topic={message.topic} node_id={reading.node_id} zone={zone.get('id', 'unknown')} "
+                f"topic={message.topic} node_id={reading.node_id} zone={zone_id} "
                 f"type={reading.metric} value={reading.value} unit={reading.unit} error={exc}"
             ) from exc
         # Une ligne par mesure : niveau DEBUG (en INFO, des dizaines de lignes

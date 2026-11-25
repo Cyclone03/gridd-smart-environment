@@ -1,5 +1,7 @@
 """Racine de composition du module Ingestion."""
 
+from django.conf import settings
+
 from modules.ingestion.adapters.messaging.sensor_message_parser import SensorMessageParser
 from modules.ingestion.adapters.messaging.sensor_reading_consumer import SensorReadingConsumer
 from modules.ingestion.adapters.messaging.validated_observation_producer import ValidatedObservationProducer
@@ -18,7 +20,7 @@ from shared.messaging import Messaging
 
 def ingestion_service() -> IngestionService:
     return IngestionService(
-        zone_resolver=ZoneResolver(),
+        zone_resolver=ZoneResolver(settings.GRIDD_NODE_ZONES),
         sensors=SensorRepository(),
         validator=ReadingValidator(),
         history=SensorHistoryStore(SensorHistoryRepository(), LocalCache.for_event_bus()),

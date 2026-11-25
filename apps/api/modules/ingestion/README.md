@@ -11,6 +11,12 @@ déplacé ou réétiqueté alimente simplement le capteur de sa nouvelle zone. L
 `node_id` reçu n'est gardé que comme provenance (`metadata.source_node_id`
 du capteur, `node_id` de l'événement).
 
+La zone est lue dans les métadonnées du message (`zone` objet ou chaîne,
+`zone_id`, `zoneId`…, y compris à la racine du message). Un nœud qui n'annonce
+pas sa zone est placé grâce à `GRIDD_NODE_ZONES` (`node01=open-workspace,…`) ;
+sinon la mesure est rejetée (« zone absente »). Le `node_id` n'est jamais pris
+comme code de zone : cela créait un espace par nœud (node01, node02…).
+
 ## Contrat
 
 | | |
